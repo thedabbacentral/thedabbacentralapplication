@@ -12,10 +12,11 @@ app.use(express.json());
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 const databaseId = process.env.NOTION_DB_ID;
-
+const cancellationDbId = process.env.NOTION_CANCELLATION_DB_ID;
+const extrasDbId = process.env.NOTION_EXTRAMEAL_DB_ID;
 // -------------------- Helpers -------------------- //
-async function getPrimaryDataSourceId() {
-  const db = await notion.databases.retrieve({ database_id: databaseId });
+async function getPrimaryDataSourceId(dbId) {
+  const db = await notion.databases.retrieve({ database_id: dbId });
   if (Array.isArray(db.data_sources) && db.data_sources.length > 0) {
     return db.data_sources[0].id;
   }
@@ -39,7 +40,6 @@ function extractCustomerFromPage(page, mealType) {
     tryTitle(props.Title) ||
     "Unnamed";
 
-  // Dynamic field selection based on mealType
   const routeField = mealType === "Lunch" ? "Lunch Route" : "Dinner Route";
   const orderField =
     mealType === "Lunch" ? "Lunch Route Order" : "Dinner Route Order";
@@ -61,28 +61,108 @@ function extractCustomerFromPage(page, mealType) {
       props["End Date"]?.date?.end ?? props["End Date"]?.date?.start ?? null,
     mealTypes: (props["Meal Type"]?.multi_select || []).map((m) => m.name),
 
-    // 🔽 New fields
     lunchMapLink: props["Lunch Map Link"]?.url ?? null,
     dinnerMapLink: props["Dinner Map Link"]?.url ?? null,
     phoneNumber: props["Phone Number"]?.phone_number ?? null,
+    LunchSpecialNormal: props["Lunch Special - Normal"]?.select?.name ?? null,
+    DinnerSpecialNormal: props["Dinner Special - Normal"]?.select?.name ?? null,
   };
 }
 
+// -------------------- NEW: Fetch cancellations -------------------- //
+async function fetchTodayCancellations() {
+  const dataSourceId = await getPrimaryDataSourceId(cancellationDbId);
+  if (!dataSourceId)
+    throw new Error("No data source found for cancellation DB");
+
+  const today = new Date().toISOString().split("T")[0];
+  const cancelled = new Set();
+
+  let cursor = undefined;
+  do {
+    const resp = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: {
+        and: [{ property: "Cancellation Date", date: { equals: today } }],
+      },
+      page_size: 100,
+      start_cursor: cursor,
+    });
+
+    (resp.results || []).forEach((page) => {
+      const props = page.properties || {};
+      const refCustomer =
+        props["The Dabba Central Database"]?.relation?.[0]?.id; // reference to main DB
+      const mealType = props["Meal"]?.select?.name; // Lunch / Dinner
+      if (refCustomer && mealType) {
+        cancelled.add(`${refCustomer}-${mealType}`);
+      }
+    });
+
+    cursor = resp.next_cursor;
+  } while (cursor);
+
+  return cancelled;
+}
+// -------------------- Fetch extras -------------------- //
+async function fetchTodayExtras() {
+  const dataSourceId = await getPrimaryDataSourceId(extrasDbId);
+  if (!dataSourceId) throw new Error("No data source found for extras DB");
+
+  const today = new Date().toISOString().split("T")[0];
+  const extras = [];
+
+  let cursor = undefined;
+  do {
+    const resp = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: { and: [{ property: "Date", date: { equals: today } }] },
+      page_size: 100,
+      start_cursor: cursor,
+    });
+
+    (resp.results || []).forEach((page) => {
+      const props = page.properties || {};
+      const refCustomer =
+        props["The Dabba Central Database"]?.relation?.[0]?.id;
+      const mealType = props["Meal Type"]?.select?.name;
+      if (refCustomer && mealType) {
+        extras.push({ id: refCustomer, mealType });
+      }
+    });
+
+    cursor = resp.next_cursor;
+  } while (cursor);
+  console.log(extras);
+  return extras;
+}
+// -------------------- Fetch Customers -------------------- //
 async function fetchCustomersByMeal(mealType) {
-  const dataSourceId = await getPrimaryDataSourceId();
-  if (!dataSourceId) throw new Error("No data source found for database");
+  const dataSourceId = await getPrimaryDataSourceId(databaseId);
+  if (!dataSourceId) throw new Error("No data source found for main DB");
 
   const today = new Date().toISOString().split("T")[0];
   const allPages = [];
   let cursor = undefined;
 
-  const filter = {
+  // Regular filter (active subscriptions)
+  const baseFilter = {
     and: [
       { property: "Start Date", date: { on_or_before: today } },
       { property: "End Date", date: { on_or_after: today } },
       { property: "Meal Type", multi_select: { contains: mealType } },
     ],
   };
+
+  // Trial filter (Trial Meal Date = today & Trial Meal Time = mealType)
+  const trialFilter = {
+    and: [
+      { property: "Trial Date", date: { equals: today } },
+      { property: "Trial Meal Time", select: { equals: mealType } },
+    ],
+  };
+
+  const filter = { or: [baseFilter, trialFilter] };
 
   do {
     const resp = await notion.dataSources.query({
@@ -95,9 +175,55 @@ async function fetchCustomersByMeal(mealType) {
     cursor = resp.next_cursor;
   } while (cursor);
 
-  const customers = allPages.map((p) => extractCustomerFromPage(p, mealType));
+  // fetch today's cancellations
+  const cancelled = await fetchTodayCancellations();
+  const extras = await fetchTodayExtras();
+  // build list excluding cancelled
+  // build list excluding cancelled
+  const customers = allPages
+    .map((p) => {
+      const cust = extractCustomerFromPage(p, mealType);
 
-  // Group by route + sort by route order
+      // 🔽 Trial override
+      const props = p.properties || {};
+      const trialDate = props["Trial Date"]?.date?.start;
+      const trialTime = props["Trial Meal Time"]?.select?.name;
+
+      if (trialDate === today && trialTime === mealType) {
+        if (mealType === "Lunch") {
+          cust.LunchSpecialNormal = "Paneer";
+        }
+        if (mealType === "Dinner") {
+          cust.DinnerSpecialNormal = "Paneer";
+        }
+      }
+
+      return cust;
+    })
+    .filter((c) => !cancelled.has(`${c.id}-${mealType}`));
+
+  const extraCustomers = await Promise.all(
+    extras
+      .filter((ex) => ex.mealType === mealType)
+      .map(async (ex) => {
+        try {
+          const page = await notion.pages.retrieve({ page_id: ex.id });
+          return extractCustomerFromPage(page, mealType);
+        } catch (err) {
+          console.error(
+            "❌ Failed to fetch extra meal customer:",
+            ex.id,
+            err.message
+          );
+          return null;
+        }
+      })
+  );
+
+  // ✅ Add valid extras
+  customers.push(...extraCustomers.filter(Boolean));
+
+  // group + sort
   const grouped = customers.reduce((acc, c) => {
     const route = c.route || "Unassigned";
     if (!acc[route]) acc[route] = [];
