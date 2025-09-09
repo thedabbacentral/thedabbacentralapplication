@@ -1,0 +1,83 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  font-family: Inter, system-ui, Arial;
+  margin: 0;
+  background: #f6f8fa;
+  color: #111;
+}
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.column {
+  background: #f4f5f7;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 0 rgba(9, 30, 66, 0.25);
+}
+
+.column-header h3 {
+  margin: 0;
+  font-size: 16px;
+  text-align: center;
+}
+
+.task-list {
+  min-height: 120px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 6px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.task-list.dragging-over {
+  background: #e2e8f0;
+}
+
+.task {
+  background: white;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 0 rgba(9, 30, 66, 0.08);
+  user-select: none;
+}
+
+.task.dragging {
+  box-shadow: 0 8px 18px rgba(15, 40, 80, 0.2);
+  transform: rotate(-1deg);
+}
+
+.add-card-form,
+.add-column-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.add-card-form input,
+.add-column-form input {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #dfe3e8;
+}
+
+.add-card-form button,
+.add-column-form button {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: #2f80ed;
+  color: white;
+}
