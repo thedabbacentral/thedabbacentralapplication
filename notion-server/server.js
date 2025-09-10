@@ -264,3 +264,10 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
+
+app.post("/customers/publish", (req, res) => {
+  console.log("📌 Received Publish Data:");
+  console.dir(req.body, { depth: null }); // pretty print full object
+
+  res.json({ success: true, message: "Data received successfully" });
+});

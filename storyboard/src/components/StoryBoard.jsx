@@ -329,6 +329,36 @@ const StoryBoard = () => {
         >
           Generate List
         </button>
+        <button
+          onClick={async () => {
+            try {
+              const response = await fetch(
+                "http://localhost:4000/customers/publish",
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ updates: columns }), // sending board state
+                }
+              );
+              const data = await response.json();
+              alert("✅ Publish triggered! Check backend logs.");
+              console.log("Publish response:", data);
+            } catch (err) {
+              console.error("❌ Publish failed", err);
+            }
+          }}
+          style={{
+            marginLeft: "10px",
+            background: "orange",
+            color: "white",
+            padding: "8px 16px",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+          }}
+        >
+          Publish
+        </button>
       </div>
 
       {/* Columns */}
@@ -396,7 +426,9 @@ const StoryBoard = () => {
                             {card.customers.map((c) => (
                               <div key={c.id}>
                                 {c.name} - {c.phoneNumber || "No phone"} -{" "}
-                                {c.LunchSpecialNormal || "Normal"}
+                                {mealType === "lunch"
+                                  ? c.LunchSpecialNormal || "Normal"
+                                  : c.DinnerSpecialNormal || "Normal"}
                               </div>
                             ))}
                             {card.mapLink && (
@@ -449,6 +481,7 @@ const StoryBoard = () => {
                 <div>
                   <strong>Name:</strong> {c.name}
                 </div>
+
                 <div>
                   <strong>Phone:</strong>{" "}
                   {isEditing ? (
@@ -457,25 +490,56 @@ const StoryBoard = () => {
                       onChange={(e) =>
                         handleInputChange(idx, "phoneNumber", e.target.value)
                       }
+                      className="border px-2 py-1 rounded w-full"
                     />
                   ) : (
                     c.phoneNumber || "No phone"
                   )}
                 </div>
-                <button
-                  onClick={() => separateCustomer(idx)}
-                  style={{
-                    marginTop: "4px",
-                    background: "#f0ad4e",
-                    color: "white",
-                    border: "none",
-                    padding: "3px 6px",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Separate
-                </button>
+
+                <div>
+                  <strong>Special:</strong>{" "}
+                  {isEditing ? (
+                    <select
+                      value={
+                        mealType === "lunch"
+                          ? c.LunchSpecialNormal || "Normal"
+                          : c.DinnerSpecialNormal || "Normal"
+                      }
+                      onChange={(e) =>
+                        handleInputChange(
+                          idx,
+                          mealType === "lunch"
+                            ? "LunchSpecialNormal"
+                            : "DinnerSpecialNormal",
+                          e.target.value
+                        )
+                      }
+                      className="border px-2 py-1 rounded w-full"
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="Special">Special</option>
+                    </select>
+                  ) : mealType === "lunch" ? (
+                    c.LunchSpecialNormal || "Normal"
+                  ) : (
+                    c.DinnerSpecialNormal || "Normal"
+                  )}
+                </div>
+                {/* 🔹 Separate button */}
+                {!isEditing && selectedCard.customers.length > 1 && (
+                  <button
+                    style={{
+                      ...buttonStyle,
+                      background: "#FF9800",
+                      color: "#fff",
+                      marginTop: "6px",
+                    }}
+                    onClick={() => separateCustomer(idx)}
+                  >
+                    Separate
+                  </button>
+                )}
               </div>
             ))}
 
