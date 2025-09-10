@@ -329,36 +329,6 @@ const StoryBoard = () => {
         >
           Generate List
         </button>
-        <button
-          onClick={async () => {
-            try {
-              const response = await fetch(
-                "http://localhost:4000/customers/publish",
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ updates: columns }), // sending board state
-                }
-              );
-              const data = await response.json();
-              alert("✅ Publish triggered! Check backend logs.");
-              console.log("Publish response:", data);
-            } catch (err) {
-              console.error("❌ Publish failed", err);
-            }
-          }}
-          style={{
-            marginLeft: "10px",
-            background: "orange",
-            color: "white",
-            padding: "8px 16px",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-          }}
-        >
-          Publish
-        </button>
       </div>
 
       {/* Columns */}
