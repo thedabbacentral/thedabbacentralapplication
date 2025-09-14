@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-
 const colors = [
   { bg: "#E0F7FA", header: "#00ACC1" },
   { bg: "#FFF3E0", header: "#FB8C00" },
@@ -9,7 +8,6 @@ const colors = [
   { bg: "#E8F5E9", header: "#43A047" },
   { bg: "#FFEBEE", header: "#E53935" },
 ];
-
 const modalBackdropStyle = {
   position: "fixed",
   inset: 0,
@@ -19,7 +17,6 @@ const modalBackdropStyle = {
   justifyContent: "center",
   zIndex: 1000,
 };
-
 const modalBoxStyle = {
   background: "#fefefe",
   padding: "20px",
@@ -30,7 +27,6 @@ const modalBoxStyle = {
   boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
   borderTop: "5px solid #4A90E2",
 };
-
 const generatedModalBoxStyle = {
   background: "#fefefe",
   padding: "20px",
@@ -41,7 +37,6 @@ const generatedModalBoxStyle = {
   boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
   borderLeft: "5px solid #4CAF50",
 };
-
 const buttonStyle = {
   padding: "8px 16px",
   margin: "5px",
@@ -49,7 +44,6 @@ const buttonStyle = {
   borderRadius: "6px",
   cursor: "pointer",
 };
-
 const StoryBoard = () => {
   const [columns, setColumns] = useState({});
   const [selectedCard, setSelectedCard] = useState(null);
@@ -259,12 +253,16 @@ const StoryBoard = () => {
         group.forEach((c, index) => {
           if (index === 0) {
             output += `${count}. ${c.name} - ${c.phoneNumber || "No phone"} - ${
-              c.LunchSpecialNormal || "Normal"
+              mealType == "lunch"
+                ? c.LunchSpecialNormal || "Normal"
+                : c.DinnerSpecialNormal || "Normal"
             }\n`;
             count++;
           } else {
             output += `${c.name} - ${c.phoneNumber || "No phone"} - ${
-              c.LunchSpecialNormal || "Normal"
+              mealType == "lunch"
+                ? c.LunchSpecialNormal || "Normal"
+                : c.DinnerSpecialNormal || "Normal"
             }\n`;
           }
         });
@@ -653,5 +651,4 @@ const StoryBoard = () => {
     </div>
   );
 };
-
 export default StoryBoard;
