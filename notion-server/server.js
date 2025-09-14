@@ -14,7 +14,10 @@ const notion = new Client({ auth: process.env.NOTION_TOKEN });
 const databaseId = process.env.NOTION_DB_ID;
 const cancellationDbId = process.env.NOTION_CANCELLATION_DB_ID;
 const extrasDbId = process.env.NOTION_EXTRAMEAL_DB_ID;
-// -------------------- Helpers -------------------- //
+
+/**
+ * Get the primary data source id for a database (v5 style)
+ */
 async function getPrimaryDataSourceId(dbId) {
   const db = await notion.databases.retrieve({ database_id: dbId });
   if (Array.isArray(db.data_sources) && db.data_sources.length > 0) {
@@ -24,6 +27,9 @@ async function getPrimaryDataSourceId(dbId) {
   return undefined;
 }
 
+/**
+ * Extract needed fields from a page/result returned by dataSources.query or pages.retrieve
+ */
 function extractCustomerFromPage(page, mealType) {
   const props = page.properties || {};
 
@@ -47,6 +53,9 @@ function extractCustomerFromPage(page, mealType) {
   let route = "Unassigned";
   if (props[routeField]?.select) {
     route = props[routeField].select.name ?? route;
+  } else if (Array.isArray(props[routeField]?.multi_select)) {
+    // defensive
+    route = props[routeField].multi_select[0]?.name ?? route;
   }
 
   const order = props[orderField]?.number ?? 0;
@@ -61,15 +70,23 @@ function extractCustomerFromPage(page, mealType) {
       props["End Date"]?.date?.end ?? props["End Date"]?.date?.start ?? null,
     mealTypes: (props["Meal Type"]?.multi_select || []).map((m) => m.name),
 
+    // Map links (url property)
     lunchMapLink: props["Lunch Map Link"]?.url ?? null,
     dinnerMapLink: props["Dinner Map Link"]?.url ?? null,
+
+    // phone number property (Notion uses phone_number)
     phoneNumber: props["Phone Number"]?.phone_number ?? null,
+
+    // "Normal/Special" select values
     LunchSpecialNormal: props["Lunch Special - Normal"]?.select?.name ?? null,
     DinnerSpecialNormal: props["Dinner Special - Normal"]?.select?.name ?? null,
   };
 }
 
-// -------------------- NEW: Fetch cancellations -------------------- //
+/* -------------------- CANCELLATIONS -------------------- */
+/**
+ * Return a Set of strings `${pageId}-${mealType}` representing cancellations for today.
+ */
 async function fetchTodayCancellations() {
   const dataSourceId = await getPrimaryDataSourceId(cancellationDbId);
   if (!dataSourceId)
@@ -82,18 +99,18 @@ async function fetchTodayCancellations() {
   do {
     const resp = await notion.dataSources.query({
       data_source_id: dataSourceId,
+      page_size: 100,
+      start_cursor: cursor,
       filter: {
         and: [{ property: "Cancellation Date", date: { equals: today } }],
       },
-      page_size: 100,
-      start_cursor: cursor,
     });
 
     (resp.results || []).forEach((page) => {
       const props = page.properties || {};
       const refCustomer =
-        props["The Dabba Central Database"]?.relation?.[0]?.id; // reference to main DB
-      const mealType = props["Meal"]?.select?.name; // Lunch / Dinner
+        props["The Dabba Central Database"]?.relation?.[0]?.id;
+      const mealType = props["Meal"]?.select?.name;
       if (refCustomer && mealType) {
         cancelled.add(`${refCustomer}-${mealType}`);
       }
@@ -104,7 +121,11 @@ async function fetchTodayCancellations() {
 
   return cancelled;
 }
-// -------------------- Fetch extras -------------------- //
+
+/* -------------------- EXTRAS -------------------- */
+/**
+ * Return array [{ id: mainPageId, mealType }]
+ */
 async function fetchTodayExtras() {
   const dataSourceId = await getPrimaryDataSourceId(extrasDbId);
   if (!dataSourceId) throw new Error("No data source found for extras DB");
@@ -116,16 +137,18 @@ async function fetchTodayExtras() {
   do {
     const resp = await notion.dataSources.query({
       data_source_id: dataSourceId,
-      filter: { and: [{ property: "Date", date: { equals: today } }] },
       page_size: 100,
       start_cursor: cursor,
+      filter: { and: [{ property: "Date", date: { equals: today } }] },
     });
 
     (resp.results || []).forEach((page) => {
       const props = page.properties || {};
       const refCustomer =
         props["The Dabba Central Database"]?.relation?.[0]?.id;
-      const mealType = props["Meal Type"]?.select?.name;
+      // Some extras use "Meal" or "Meal Type" naming; try both defensively:
+      const mealType =
+        props["Meal Type"]?.select?.name ?? props["Meal"]?.select?.name;
       if (refCustomer && mealType) {
         extras.push({ id: refCustomer, mealType });
       }
@@ -133,10 +156,17 @@ async function fetchTodayExtras() {
 
     cursor = resp.next_cursor;
   } while (cursor);
-  console.log(extras);
+
+  // debug log
+  console.log("✅ Today extras:", extras);
   return extras;
 }
-// -------------------- Fetch Customers -------------------- //
+
+/* -------------------- FETCH CUSTOMERS BY MEAL -------------------- */
+/**
+ * Fetch active + trial customers for given mealType (Lunch / Dinner).
+ * Uses dataSources.query on the main DB data source (no databases.query).
+ */
 async function fetchCustomersByMeal(mealType) {
   const dataSourceId = await getPrimaryDataSourceId(databaseId);
   if (!dataSourceId) throw new Error("No data source found for main DB");
@@ -145,7 +175,7 @@ async function fetchCustomersByMeal(mealType) {
   const allPages = [];
   let cursor = undefined;
 
-  // Regular filter (active subscriptions)
+  // Active subscriptions filter
   const baseFilter = {
     and: [
       { property: "Start Date", date: { on_or_before: today } },
@@ -154,7 +184,7 @@ async function fetchCustomersByMeal(mealType) {
     ],
   };
 
-  // Trial filter (Trial Meal Date = today & Trial Meal Time = mealType)
+  // Trial filter (trial date today + trial meal time equals mealType)
   const trialFilter = {
     and: [
       { property: "Trial Date", date: { equals: today } },
@@ -164,6 +194,7 @@ async function fetchCustomersByMeal(mealType) {
 
   const filter = { or: [baseFilter, trialFilter] };
 
+  // Paginate over the main DB data source
   do {
     const resp = await notion.dataSources.query({
       data_source_id: dataSourceId,
@@ -175,55 +206,63 @@ async function fetchCustomersByMeal(mealType) {
     cursor = resp.next_cursor;
   } while (cursor);
 
-  // fetch today's cancellations
+  // Build quick lookup map of main pages by id (used for matching extras)
+  const pageById = new Map(allPages.map((p) => [p.id, p]));
+
+  // fetch cancellations & extras (these both use their own dataSources)
   const cancelled = await fetchTodayCancellations();
   const extras = await fetchTodayExtras();
-  // build list excluding cancelled
-  // build list excluding cancelled
+
+  // Map allPages => customers (apply trial override)
   const customers = allPages
     .map((p) => {
       const cust = extractCustomerFromPage(p, mealType);
 
-      // 🔽 Trial override
+      // trial override: if trial is today for this meal, set special -> Paneer
       const props = p.properties || {};
       const trialDate = props["Trial Date"]?.date?.start;
       const trialTime = props["Trial Meal Time"]?.select?.name;
-
       if (trialDate === today && trialTime === mealType) {
-        if (mealType === "Lunch") {
-          cust.LunchSpecialNormal = "Paneer";
-        }
-        if (mealType === "Dinner") {
-          cust.DinnerSpecialNormal = "Paneer";
-        }
+        if (mealType === "Lunch") cust.LunchSpecialNormal = "Paneer";
+        if (mealType === "Dinner") cust.DinnerSpecialNormal = "Paneer";
       }
 
       return cust;
     })
     .filter((c) => !cancelled.has(`${c.id}-${mealType}`));
 
-  const extraCustomers = await Promise.all(
-    extras
-      .filter((ex) => ex.mealType === mealType)
-      .map(async (ex) => {
-        try {
-          const page = await notion.pages.retrieve({ page_id: ex.id });
-          return extractCustomerFromPage(page, mealType);
-        } catch (err) {
-          console.error(
-            "❌ Failed to fetch extra meal customer:",
-            ex.id,
-            err.message
-          );
-          return null;
-        }
-      })
-  );
+  // For extras: some entries reference main DB page ids that might already be in allPages.
+  // If we find the main page in pageById, use that. Otherwise, attempt pages.retrieve as fallback.
+  for (const ex of extras) {
+    if (ex.mealType !== mealType) continue;
+    const mainId = ex.id;
+    if (pageById.has(mainId)) {
+      const page = pageById.get(mainId);
+      const cust = extractCustomerFromPage(page, mealType);
+      customers.push(cust);
+      console.log(
+        `✅ Adding Extra (found in main pages): ${cust.name} ${mealType}`
+      );
+    } else {
+      // fallback: try pages.retrieve (may fail if integration lacks permissions)
+      try {
+        const page = await notion.pages.retrieve({ page_id: mainId });
+        const cust = extractCustomerFromPage(page, mealType);
+        customers.push(cust);
+        console.log(
+          `✅ Adding Extra (via pages.retrieve): ${cust.name} ${mealType}`
+        );
+      } catch (err) {
+        console.error(
+          "❌ Failed to fetch extra meal customer:",
+          mainId,
+          err.message
+        );
+      }
+    }
+  }
 
-  // ✅ Add valid extras
-  customers.push(...extraCustomers.filter(Boolean));
-
-  // group + sort
+  // Group by route and sort by order
   const grouped = customers.reduce((acc, c) => {
     const route = c.route || "Unassigned";
     if (!acc[route]) acc[route] = [];
@@ -238,14 +277,17 @@ async function fetchCustomersByMeal(mealType) {
   return grouped;
 }
 
-// -------------------- Routes -------------------- //
+/* -------------------- ROUTES -------------------- */
 app.get("/customers/lunch", async (req, res) => {
   try {
     const grouped = await fetchCustomersByMeal("Lunch");
     return res.json(grouped);
   } catch (err) {
-    console.error("❌ Error in /customers/lunch:", err.message);
-    return res.status(500).json({ error: "Failed to fetch lunch customers" });
+    console.error("❌ Error in /customers/lunch:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to fetch lunch customers",
+      details: err?.message,
+    });
   }
 });
 
@@ -254,20 +296,16 @@ app.get("/customers/dinner", async (req, res) => {
     const grouped = await fetchCustomersByMeal("Dinner");
     return res.json(grouped);
   } catch (err) {
-    console.error("❌ Error in /customers/dinner:", err.message);
-    return res.status(500).json({ error: "Failed to fetch dinner customers" });
+    console.error("❌ Error in /customers/dinner:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to fetch dinner customers",
+      details: err?.message,
+    });
   }
 });
 
-// -------------------- Start server -------------------- //
+/* -------------------- START -------------------- */
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
-
-app.post("/customers/publish", (req, res) => {
-  console.log("📌 Received Publish Data:");
-  console.dir(req.body, { depth: null }); // pretty print full object
-
-  res.json({ success: true, message: "Data received successfully" });
 });
