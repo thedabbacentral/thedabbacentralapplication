@@ -239,6 +239,7 @@ async function fetchCustomersByMeal(mealType) {
     if (pageById.has(mainId)) {
       const page = pageById.get(mainId);
       const cust = extractCustomerFromPage(page, mealType);
+      cust.route = "Unassigned";
       customers.push(cust);
       console.log(
         `✅ Adding Extra (found in main pages): ${cust.name} ${mealType}`
@@ -248,6 +249,7 @@ async function fetchCustomersByMeal(mealType) {
       try {
         const page = await notion.pages.retrieve({ page_id: mainId });
         const cust = extractCustomerFromPage(page, mealType);
+        cust.route = "Unassigned";
         customers.push(cust);
         console.log(
           `✅ Adding Extra (via pages.retrieve): ${cust.name} ${mealType}`
@@ -261,6 +263,59 @@ async function fetchCustomersByMeal(mealType) {
       }
     }
   }
+
+  // Group by route and sort by order
+  const grouped = customers.reduce((acc, c) => {
+    const route = c.route || "Unassigned";
+    if (!acc[route]) acc[route] = [];
+    acc[route].push(c);
+    return acc;
+  }, {});
+
+  for (const route in grouped) {
+    grouped[route].sort((a, b) => a.order - b.order);
+  }
+
+  return grouped;
+}
+
+async function fetchAllCustomersByMeal(mealType) {
+  const dataSourceId = await getPrimaryDataSourceId(databaseId);
+  if (!dataSourceId) throw new Error("No data source found for main DB");
+
+  const today = new Date().toISOString().split("T")[0];
+  const allPages = [];
+  let cursor = undefined;
+
+  // Active subscriptions filter
+  const filter = {
+    and: [
+      { property: "Start Date", date: { on_or_before: today } },
+      { property: "End Date", date: { on_or_after: today } },
+      { property: "Meal Type", multi_select: { contains: mealType } },
+    ],
+  };
+
+  // Paginate over the main DB data source
+  do {
+    const resp = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      page_size: 100,
+      start_cursor: cursor,
+      filter,
+    });
+    allPages.push(...(resp.results || []));
+    cursor = resp.next_cursor;
+  } while (cursor);
+
+  // Build quick lookup map of main pages by id (used for matching extras)
+  const pageById = new Map(allPages.map((p) => [p.id, p]));
+
+  // Map allPages => customers (apply trial override)
+  const customers = allPages.map((p) => {
+    const cust = extractCustomerFromPage(p, mealType);
+    return cust;
+  });
 
   // Group by route and sort by order
   const grouped = customers.reduce((acc, c) => {
@@ -291,6 +346,19 @@ app.get("/customers/lunch", async (req, res) => {
   }
 });
 
+app.get("/customers/lunch/all", async (req, res) => {
+  try {
+    const grouped = await fetchAllCustomersByMeal("Lunch");
+    return res.json(grouped);
+  } catch (err) {
+    console.error("❌ Error in /customers/lunch/all:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to fetch lunch customers",
+      details: err?.message,
+    });
+  }
+});
+
 app.get("/customers/dinner", async (req, res) => {
   try {
     const grouped = await fetchCustomersByMeal("Dinner");
@@ -304,15 +372,158 @@ app.get("/customers/dinner", async (req, res) => {
   }
 });
 
+app.get("/customers/dinner/all", async (req, res) => {
+  try {
+    const grouped = await fetchAllCustomersByMeal("Dinner");
+    return res.json(grouped);
+  } catch (err) {
+    console.error("❌ Error in /customers/dinner/all:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to fetch all dinner customers",
+      details: err?.message,
+    });
+  }
+});
+
 /* -------------------- START -------------------- */
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
 
-app.post("/customers/publish", (req, res) => {
+app.post("/customers/route/publish", async (req, res) => {
   console.log("📌 Received Publish Data:");
-  console.dir(req.body, { depth: null }); // pretty print full object
+  const data = req.body;
+  try {
+    const customers = data?.newdata;
+    const mealType = data?.mealType;
 
-  res.json({ success: true, message: "Data received successfully" });
+    if (!customers || !mealType) {
+      return res.status(400).json({
+        error: "Customers or meal type not found",
+      });
+    }
+    if (!["lunch", "dinner"].includes(mealType)) {
+      return res.status(400).json({
+        error: "Meal type not found",
+      });
+    }
+    console.log("🚀 ~ app.post ~ customers:", customers);
+
+    for (const customer of customers) {
+      const pageId = customer.id;
+
+      console.log(`Updating page: ${pageId}`);
+
+      await notion.pages.update({
+        page_id: pageId,
+        properties: {
+          ...(mealType === "lunch"
+            ? {
+                "Lunch Route": {
+                  select: {
+                    name: customer.lunchRoute,
+                  },
+                },
+              }
+            : {
+                "Dinner Route": {
+                  select: {
+                    name: customer.dinnerRoute,
+                  },
+                },
+              }),
+          ...(mealType === "lunch"
+            ? {
+                "Lunch Route Order": {
+                  number: customer.lunchRouteOrder,
+                },
+              }
+            : {
+                "Dinner Route Order": {
+                  number: customer.dinnerRouteOrder,
+                },
+              }),
+        },
+      });
+    }
+
+    res.json({ success: true, message: "Data received successfully" });
+  } catch (err) {
+    console.error("❌ Error in /customers/publish:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to publish customers",
+      details: err?.message,
+    });
+  }
+});
+app.post("/customer/update", async (req, res) => {
+  console.log("📌 Received Publish Data:");
+  const data = req.body;
+  try {
+    const updateData = data?.customer;
+    const mealType = data?.mealType;
+    const customers = updateData?.customers;
+    if (!customers?.length) {
+      return res.status(400).json({
+        error: "Customer not found",
+      });
+    }
+    if (!mealType || !["lunch", "dinner"].includes(mealType)) {
+      return res.status(400).json({
+        error: "Meal type not found",
+      });
+    }
+    for (const customer of customers) {
+      const pageId = customer.id;
+      if (!pageId) {
+        return res.status(400).json({
+          error: "Page id not found",
+        });
+      }
+      console.log(`Updating page: ${pageId}`);
+      await notion.pages.update({
+        page_id: pageId,
+        properties: {
+          ...(mealType === "lunch"
+            ? {
+                "Lunch Special - Normal": {
+                  select: {
+                    name: customer.LunchSpecialNormal,
+                  },
+                },
+              }
+            : {
+                "Dinner Special - Normal": {
+                  select: {
+                    name: customer.DinnerSpecialNormal,
+                  },
+                },
+              }),
+          ...(mealType === "lunch"
+            ? {
+                "Lunch Map Link": {
+                  url: updateData.mapLink,
+                },
+              }
+            : {
+                "Dinner Map Link": {
+                  url: updateData.mapLink,
+                },
+              }),
+          "Phone Number": {
+            phone_number: customer.phoneNumber,
+          },
+        },
+      });
+    }
+
+    res.json({ success: true, message: "Data received successfully" });
+  } catch (err) {
+    console.error("❌ Error in /customers/publish:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to publish customers",
+      details: err?.message,
+    });
+  }
 });

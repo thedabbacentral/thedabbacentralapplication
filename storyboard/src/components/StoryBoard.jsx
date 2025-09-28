@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import "./StoryBoard.css";
 const colors = [
   { bg: "#E0F7FA", header: "#00ACC1" },
   { bg: "#FFF3E0", header: "#FB8C00" },
@@ -44,17 +45,21 @@ const buttonStyle = {
   borderRadius: "6px",
   cursor: "pointer",
 };
-const StoryBoard = () => {
+const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
   const [columns, setColumns] = useState({});
   const [selectedCard, setSelectedCard] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [mealType, setMealType] = useState("lunch");
+  const [fetching, setFetching] = useState(false);
   const [generatedList, setGeneratedList] = useState(null);
 
   const fetchData = async () => {
     try {
+      setFetching(true);
       const res = await axios.get(
-        `http://localhost:4000/customers/${mealType}`
+        `http://localhost:4000/customers/${mealType}${
+          isFetchAllCustomers ? "/all" : ""
+        }`
       );
 
       const sortedColumns = {};
@@ -88,12 +93,14 @@ const StoryBoard = () => {
       setColumns(sortedColumns);
     } catch (err) {
       console.error("Error fetching data:", err);
+    } finally {
+      setFetching(false);
     }
   };
 
   useEffect(() => {
     fetchData();
-  }, [mealType]);
+  }, [mealType, isFetchAllCustomers]);
 
   const onDragEnd = (result) => {
     const { source, destination } = result;
@@ -197,10 +204,35 @@ const StoryBoard = () => {
     }
     setSelectedCard(updated);
   };
+  console.log("Columns: ", columns);
 
-  const saveChanges = () => {
+  const updateSingleCustomer = async (customer) => {
+    console.log("Customer: ", customer);
+    try {
+      const response = await fetch("http://localhost:4000/customer/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer, mealType }), // sending board state
+      });
+      if (response.ok) {
+        alert("✅ Customer updated!");
+        return true;
+      } else {
+        alert("❌ Customer update failed");
+        return false;
+      }
+    } catch (err) {
+      console.error("Error updating customer: ", err);
+      return false;
+    }
+  };
+
+  const saveChanges = async () => {
     if (!selectedCard) return;
-
+    if (isPublish) {
+      const isUpdated = await updateSingleCustomer(selectedCard);
+      if (!isUpdated) return;
+    }
     // Find which column this card belongs to
     const colId = Object.keys(columns).find((col) =>
       columns[col].some((card) => card.id === selectedCard.id)
@@ -303,6 +335,7 @@ const StoryBoard = () => {
             color: mealType === "lunch" ? "#fff" : "#000",
           }}
           onClick={() => setMealType("lunch")}
+          disabled={fetching}
         >
           Lunch
         </button>
@@ -313,6 +346,7 @@ const StoryBoard = () => {
             color: mealType === "dinner" ? "#fff" : "#000",
           }}
           onClick={() => setMealType("dinner")}
+          disabled={fetching}
         >
           Dinner
         </button>
@@ -324,19 +358,48 @@ const StoryBoard = () => {
             marginLeft: "auto",
           }}
           onClick={generateList}
+          disabled={fetching}
         >
           Generate List
         </button>
         <button
           onClick={async () => {
             try {
-              console.log("Test Data:", columns);
+              const groupedCustomers = columns;
+
+              // console.log("Grouped Customers: ", groupedCustomers);
+              let newdata = [];
+              Object.keys(groupedCustomers).forEach((key) => {
+                // console.log(`${key}: ${data[key]}`);
+                let singleRouteCustomers = groupedCustomers[key];
+
+                singleRouteCustomers = singleRouteCustomers?.map(
+                  (locationCustomers, index) => {
+                    return locationCustomers?.customers?.map((customer) => ({
+                      ...customer,
+                      ...(mealType === "lunch"
+                        ? {
+                            lunchRoute: key,
+                            lunchRouteOrder: index * 100,
+                          }
+                        : {
+                            dinnerRoute: key,
+                            dinnerRouteOrder: index * 100,
+                          }),
+                    }));
+                  }
+                );
+                console.log("Single Route Customers: ", singleRouteCustomers);
+
+                newdata = [...newdata, ...singleRouteCustomers];
+              });
+              newdata = newdata?.flat();
               const response = await fetch(
-                "http://localhost:4000/customers/publish",
+                "http://localhost:4000/customers/route/publish",
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ updates: columns }), // sending board state
+                  body: JSON.stringify({ newdata, mealType }), // sending board state
                 }
               );
               const data = await response.json();
@@ -355,8 +418,9 @@ const StoryBoard = () => {
             borderRadius: "6px",
             cursor: "pointer",
           }}
+          disabled={fetching || !isPublish || !isFetchAllCustomers}
         >
-          Publish
+          Publish Route
         </button>
       </div>
 
