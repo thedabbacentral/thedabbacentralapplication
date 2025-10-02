@@ -652,20 +652,25 @@ app.post("/customers/serve/publish", async (req, res) => {
           Poster: {
             checkbox: customer.poster,
           },
-          "Customisation Lunch": {
-            rich_text: [
-              {
-                text: { content: customer.customisation },
-              },
-            ],
-          },
-          "Customisation Dinner": {
-            rich_text: [
-              {
-                text: { content: customer.customisation },
-              },
-            ],
-          },
+          ...(mealType === "lunch"
+            ? {
+                "Customisation Lunch": {
+                  rich_text: [
+                    {
+                      text: { content: customer.customisation },
+                    },
+                  ],
+                },
+              }
+            : {
+                "Customisation Dinner": {
+                  rich_text: [
+                    {
+                      text: { content: customer.customisation },
+                    },
+                  ],
+                },
+              }),
         },
       });
     }
