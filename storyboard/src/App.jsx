@@ -1,4 +1,7 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import StoryBoard from "./components/StoryBoard";
+import StoryBoard2 from "./components/StoryBoard2";
+
 import { useState } from "react";
 
 function App() {
@@ -91,12 +94,53 @@ function App() {
               />
             </div>
           </label>
+          {window.location.pathname !== "/delivery" ? (
+            <button
+              className="btn route-btn"
+              style={{
+                background: "#28a745",
+                "&:hover": { background: "#1e7e34" },
+              }}
+              onClick={() => (window.location.href = "/delivery")}
+            >
+              Open delivery list
+            </button>
+          ) : (
+            <button
+              className="btn route-btn"
+              style={{
+                background: "#28a745",
+                "&:hover": { background: "#1e7e34" },
+              }}
+              onClick={() => (window.location.href = "/")}
+            >
+              Open serving list
+            </button>
+          )}
         </div>
       </div>
-      <StoryBoard
-        isPublish={isPublish}
-        isFetchAllCustomers={isFetchAllCustomers}
-      />
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <StoryBoard2
+                isPublish={isPublish}
+                isFetchAllCustomers={isFetchAllCustomers}
+              />
+            }
+          />
+          <Route
+            path="/delivery"
+            element={
+              <StoryBoard
+                isPublish={isPublish}
+                isFetchAllCustomers={isFetchAllCustomers}
+              />
+            }
+          />
+        </Routes>
+      </BrowserRouter>
     </div>
   );
 }

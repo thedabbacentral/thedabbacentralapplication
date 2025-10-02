@@ -80,6 +80,15 @@ function extractCustomerFromPage(page, mealType) {
     // "Normal/Special" select values
     LunchSpecialNormal: props["Lunch Special - Normal"]?.select?.name ?? null,
     DinnerSpecialNormal: props["Dinner Special - Normal"]?.select?.name ?? null,
+
+    customisationLunch: tryTitle(props["Customisation Lunch"]) ?? null,
+    customisationDinner: tryTitle(props["Customisation Dinner"]) ?? null,
+
+    lunchServeOrder: props["Lunch Serve Order"]?.number ?? 0,
+    dinnerServeOrder: props["Dinner Serve Order"]?.number ?? 0,
+    poster: props["Poster"]?.checkbox ?? false,
+
+    foodPreference: props["Veg/Non-Veg"]?.select?.name ?? null,
   };
 }
 
@@ -167,7 +176,7 @@ async function fetchTodayExtras() {
  * Fetch active + trial customers for given mealType (Lunch / Dinner).
  * Uses dataSources.query on the main DB data source (no databases.query).
  */
-async function fetchCustomersByMeal(mealType) {
+async function fetchCustomersByMeal(mealType, listtype) {
   const dataSourceId = await getPrimaryDataSourceId(databaseId);
   if (!dataSourceId) throw new Error("No data source found for main DB");
 
@@ -264,6 +273,10 @@ async function fetchCustomersByMeal(mealType) {
     }
   }
 
+  if (listtype === "serve") {
+    return customers;
+  }
+
   // Group by route and sort by order
   const grouped = customers.reduce((acc, c) => {
     const route = c.route || "Unassigned";
@@ -279,7 +292,7 @@ async function fetchCustomersByMeal(mealType) {
   return grouped;
 }
 
-async function fetchAllCustomersByMeal(mealType) {
+async function fetchAllCustomersByMeal(mealType, listtype) {
   const dataSourceId = await getPrimaryDataSourceId(databaseId);
   if (!dataSourceId) throw new Error("No data source found for main DB");
 
@@ -316,6 +329,9 @@ async function fetchAllCustomersByMeal(mealType) {
     const cust = extractCustomerFromPage(p, mealType);
     return cust;
   });
+  if (listtype === "serve") {
+    return customers;
+  }
 
   // Group by route and sort by order
   const grouped = customers.reduce((acc, c) => {
@@ -359,6 +375,35 @@ app.get("/customers/lunch/all", async (req, res) => {
   }
 });
 
+app.get("/customers/serve/lunch", async (req, res) => {
+  try {
+    const customers = await fetchCustomersByMeal("Lunch", "serve");
+    return res.json(customers);
+  } catch (err) {
+    console.error("❌ Error in /customers/serve/lunch:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to fetch serve lunch customers",
+      details: err?.message,
+    });
+  }
+});
+
+app.get("/customers/serve/lunch/all", async (req, res) => {
+  try {
+    const grouped = await fetchAllCustomersByMeal("Lunch", "serve");
+    return res.json(grouped);
+  } catch (err) {
+    console.error(
+      "❌ Error in /customers/serve/lunch/all:",
+      err?.message ?? err
+    );
+    return res.status(500).json({
+      error: "Failed to fetch serve lunch customers",
+      details: err?.message,
+    });
+  }
+});
+
 app.get("/customers/dinner", async (req, res) => {
   try {
     const grouped = await fetchCustomersByMeal("Dinner");
@@ -384,11 +429,33 @@ app.get("/customers/dinner/all", async (req, res) => {
     });
   }
 });
+app.get("/customers/serve/dinner", async (req, res) => {
+  try {
+    const grouped = await fetchCustomersByMeal("Dinner", "serve");
+    return res.json(grouped);
+  } catch (err) {
+    console.error("❌ Error in /customers/serve/dinner:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to fetch serve dinner customers",
+      details: err?.message,
+    });
+  }
+});
 
-/* -------------------- START -------------------- */
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+app.get("/customers/serve/dinner/all", async (req, res) => {
+  try {
+    const grouped = await fetchAllCustomersByMeal("Dinner", "serve");
+    return res.json(grouped);
+  } catch (err) {
+    console.error(
+      "❌ Error in /customers/serve/dinner/all:",
+      err?.message ?? err
+    );
+    return res.status(500).json({
+      error: "Failed to fetch serve dinner customers",
+      details: err?.message,
+    });
+  }
 });
 
 app.post("/customers/route/publish", async (req, res) => {
@@ -457,6 +524,7 @@ app.post("/customers/route/publish", async (req, res) => {
     });
   }
 });
+
 app.post("/customer/update", async (req, res) => {
   console.log("📌 Received Publish Data:");
   const data = req.body;
@@ -526,4 +594,94 @@ app.post("/customer/update", async (req, res) => {
       details: err?.message,
     });
   }
+});
+
+app.post("/customers/serve/publish", async (req, res) => {
+  console.log("📌 Received Publish Data:");
+  const data = req.body;
+  try {
+    const customers = data?.newdata;
+    const mealType = data?.mealType;
+
+    if (!customers || !mealType) {
+      return res.status(400).json({
+        error: "Customers or meal type not found",
+      });
+    }
+    if (!["lunch", "dinner"].includes(mealType)) {
+      return res.status(400).json({
+        error: "Meal type not found",
+      });
+    }
+    console.log("🚀 ~ app.post ~ customers:", customers);
+    console.log("Customers: ", customers);
+    for (const customer of customers) {
+      const pageId = customer.id;
+
+      console.log(`Updating page: ${pageId}`);
+
+      await notion.pages.update({
+        page_id: pageId,
+        properties: {
+          ...(mealType === "lunch"
+            ? {
+                "Lunch Serve Order": {
+                  number: customer.serveOrder,
+                },
+              }
+            : {
+                "Dinner Serve Order": {
+                  number: customer.serveOrder,
+                },
+              }),
+          ...(mealType === "lunch"
+            ? {
+                "Lunch Special - Normal": {
+                  select: {
+                    name: customer.thaliType,
+                  },
+                },
+              }
+            : {
+                "Dinner Special - Normal": {
+                  select: {
+                    name: customer.thaliType,
+                  },
+                },
+              }),
+          Poster: {
+            checkbox: customer.poster,
+          },
+          "Customisation Lunch": {
+            rich_text: [
+              {
+                text: { content: customer.customisation },
+              },
+            ],
+          },
+          "Customisation Dinner": {
+            rich_text: [
+              {
+                text: { content: customer.customisation },
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    res.json({ success: true, message: "Data received successfully" });
+  } catch (err) {
+    console.error("❌ Error in /customers/serve/publish:", err?.message ?? err);
+    return res.status(500).json({
+      error: "Failed to publish customers",
+      details: err?.message,
+    });
+  }
+});
+
+/* -------------------- START -------------------- */
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });

@@ -1,0 +1,128 @@
+.app {
+  max-width: 900px;
+  margin: auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.section-title {
+  margin: 10px 0;
+  font-size: 18px;
+}
+
+.list {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 10px;
+  min-height: 120px;
+  background: #fafafa;
+  margin-bottom: 20px;
+}
+
+.card {
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+
+.card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card.dragging {
+  background: #e0f7fa;
+  border-color: #00bcd4;
+}
+
+.edit-box {
+  display: flex;
+  gap: 10px;
+}
+
+.edit-box input {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+}
+
+.btn {
+  padding: 6px 12px;
+  border: none;
+  background: #007bff;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn:hover {
+  background: #0056b3;
+}
+
+.generate-btn {
+  background: #28a745;
+}
+
+.generate-btn:hover {
+  background: #1e7e34;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal h3 {
+  margin-top: 0;
+}
+
+.modal-content h4 {
+  margin: 10px 0 5px;
+}
+
+.close-btn {
+  background: #dc3545;
+  margin-top: 15px;
+}
+
+.close-btn:hover {
+  background: #a71d2a;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+}
