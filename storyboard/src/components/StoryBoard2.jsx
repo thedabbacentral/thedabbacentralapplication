@@ -142,7 +142,7 @@ function App({ isPublish, isFetchAllCustomers }) {
   };
 
   useEffect(() => {
-    fetchCustomers();
+    if (mealType) fetchCustomers();
   }, [mealType, isFetchAllCustomers]);
 
   const handleDragEnd = (result) => {

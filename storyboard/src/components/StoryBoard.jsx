@@ -99,7 +99,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
   };
 
   useEffect(() => {
-    fetchData();
+    if (mealType) fetchData();
   }, [mealType, isFetchAllCustomers]);
 
   const onDragEnd = (result) => {
