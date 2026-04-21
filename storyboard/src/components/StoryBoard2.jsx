@@ -48,7 +48,7 @@ function App({ isPublish, isFetchAllCustomers }) {
     try {
       setFetching(true);
       const resp = await axios.get(
-        `https://thedabbacentralapplication-xnig.vercel.app/customers/serve/${mealType}${
+        `https://thedabbacentralapplication-vo2b.vercel.app/customers/serve/${mealType}${
           isFetchAllCustomers ? "/all" : ""
         }`,
       );
@@ -411,7 +411,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 console.log("Newdata: ", newdata);
 
                 const response = await fetch(
-                  "https://thedabbacentralapplication-xnig.vercel.app/customers/serve/publish",
+                  "https://thedabbacentralapplication-vo2b.vercel.app/customers/serve/publish",
                   {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
