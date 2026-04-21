@@ -57,15 +57,15 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
     try {
       setFetching(true);
       const res = await axios.get(
-        `http://localhost:4000/customers/${mealType}${
+        `https://thedabbacentralapplication-xnig.vercel.app/customers/${mealType}${
           isFetchAllCustomers ? "/all" : ""
-        }`
+        }`,
       );
 
       const sortedColumns = {};
       Object.entries(res.data).forEach(([columnId, cards]) => {
         const sorted = [...cards].sort(
-          (a, b) => (a.order || 0) - (b.order || 0)
+          (a, b) => (a.order || 0) - (b.order || 0),
         );
 
         // Group only if mapLink exists
@@ -86,7 +86,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
             mapLink: group[0][`${mealType}MapLink`] || null,
             customers: group,
             id: group.map((g) => g.id).join("-"),
-          })
+          }),
         );
       });
 
@@ -128,7 +128,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
       // Check if a card with the same mapLink exists in destination
       if (moved.mapLink) {
         const existingIndex = destCards.findIndex(
-          (c) => c.mapLink === moved.mapLink
+          (c) => c.mapLink === moved.mapLink,
         );
         if (existingIndex !== -1) {
           // Merge customers into the existing card
@@ -161,7 +161,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
 
     // Find which column this card belongs to
     const colId = Object.keys(columns).find((col) =>
-      columns[col].some((card) => card.id === selectedCard.id)
+      columns[col].some((card) => card.id === selectedCard.id),
     );
 
     if (!colId) return;
@@ -209,11 +209,14 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
   const updateSingleCustomer = async (customer) => {
     console.log("Customer: ", customer);
     try {
-      const response = await fetch("http://localhost:4000/customer/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer, mealType }), // sending board state
-      });
+      const response = await fetch(
+        "https://thedabbacentralapplication-xnig.vercel.app/customer/update",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customer, mealType }), // sending board state
+        },
+      );
       if (response.ok) {
         alert("✅ Customer updated!");
         return true;
@@ -235,7 +238,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
     }
     // Find which column this card belongs to
     const colId = Object.keys(columns).find((col) =>
-      columns[col].some((card) => card.id === selectedCard.id)
+      columns[col].some((card) => card.id === selectedCard.id),
     );
 
     if (!colId) return;
@@ -387,7 +390,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
                             dinnerRouteOrder: index * 100,
                           }),
                     }));
-                  }
+                  },
                 );
                 console.log("Single Route Customers: ", singleRouteCustomers);
 
@@ -395,12 +398,12 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
               });
               newdata = newdata?.flat();
               const response = await fetch(
-                "http://localhost:4000/customers/route/publish",
+                "https://thedabbacentralapplication-xnig.vercel.app/customers/route/publish",
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ newdata, mealType }), // sending board state
-                }
+                },
               );
               const data = await response.json();
               alert("✅ Publish triggered! Check backend logs.");
@@ -575,7 +578,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
                           mealType === "lunch"
                             ? "LunchSpecialNormal"
                             : "DinnerSpecialNormal",
-                          e.target.value
+                          e.target.value,
                         )
                       }
                       className="border px-2 py-1 rounded w-full"

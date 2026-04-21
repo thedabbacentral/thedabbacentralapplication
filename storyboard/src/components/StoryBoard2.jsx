@@ -48,9 +48,9 @@ function App({ isPublish, isFetchAllCustomers }) {
     try {
       setFetching(true);
       const resp = await axios.get(
-        `http://localhost:4000/customers/serve/${mealType}${
+        `https://thedabbacentralapplication-xnig.vercel.app/customers/serve/${mealType}${
           isFetchAllCustomers ? "/all" : ""
-        }`
+        }`,
       );
       const data = Array.isArray(resp.data) ? resp.data : [];
       setData(data);
@@ -76,11 +76,11 @@ function App({ isPublish, isFetchAllCustomers }) {
                   customer.foodPreference === "Non-Veg"
                     ? "Chicken"
                     : customer.LunchSpecialNormal === "Paneer"
-                    ? "Normal"
-                    : customer.LunchSpecialNormal === "Normal" ||
-                      customer.lunchServeOrder
-                    ? customer.LunchSpecialNormal ?? "Unassigned"
-                    : "Unassigned",
+                      ? "Normal"
+                      : customer.LunchSpecialNormal === "Normal" ||
+                          customer.lunchServeOrder
+                        ? (customer.LunchSpecialNormal ?? "Unassigned")
+                        : "Unassigned",
                 serveOrder: customer.lunchServeOrder ?? 0,
                 customisation: customer.customisationLunch ?? "",
                 poster: customer.poster,
@@ -93,16 +93,16 @@ function App({ isPublish, isFetchAllCustomers }) {
                   customer.foodPreference === "Non-Veg"
                     ? "Chicken"
                     : customer.DinnerSpecialNormal === "Normal" ||
-                      customer.dinnerServeOrder
-                    ? customer.DinnerSpecialNormal ?? "Unassigned"
-                    : "Unassigned",
+                        customer.dinnerServeOrder
+                      ? (customer.DinnerSpecialNormal ?? "Unassigned")
+                      : "Unassigned",
                 serveOrder: customer.dinnerServeOrder ?? 0,
                 customisation: customer.customisationDinner ?? "",
                 poster: customer.poster,
                 id: customer.id,
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
-              }
+              },
         )
         ?.sort((a, b) => a.serveOrder - b.serveOrder);
     } else {
@@ -113,7 +113,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 thaliType:
                   customer.LunchSpecialNormal === "Normal" ||
                   customer.lunchServeOrder
-                    ? customer.LunchSpecialNormal ?? "Unassigned"
+                    ? (customer.LunchSpecialNormal ?? "Unassigned")
                     : "Unassigned",
                 serveOrder: customer.lunchServeOrder ?? 0,
                 customisation: customer.customisationLunch ?? "",
@@ -126,7 +126,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 thaliType:
                   customer.DinnerSpecialNormal === "Normal" ||
                   customer.dinnerServeOrder
-                    ? customer.DinnerSpecialNormal ?? "Unassigned"
+                    ? (customer.DinnerSpecialNormal ?? "Unassigned")
                     : "Unassigned",
                 serveOrder: customer.dinnerServeOrder ?? 0,
                 customisation: customer.customisationDinner ?? "",
@@ -134,7 +134,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 id: customer.id,
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
-              }
+              },
         )
         ?.sort((a, b) => a.serveOrder - b.serveOrder);
     }
@@ -177,7 +177,7 @@ function App({ isPublish, isFetchAllCustomers }) {
       let otherCustomers = [
         ...customers?.filter(
           (c) =>
-            c.thaliType !== sourceDroppable && c.thaliType !== destDroppable
+            c.thaliType !== sourceDroppable && c.thaliType !== destDroppable,
         ),
       ];
 
@@ -252,7 +252,7 @@ function App({ isPublish, isFetchAllCustomers }) {
     setEditingInstanceId(customerInstanceId);
 
     setEditedThaliSpecial(
-      customers.find((c) => c.instanceId === customerInstanceId)?.customisation
+      customers.find((c) => c.instanceId === customerInstanceId)?.customisation,
     );
   };
 
@@ -263,7 +263,7 @@ function App({ isPublish, isFetchAllCustomers }) {
             ...c,
             customisation: editedThaliSpecial,
           }
-        : c
+        : c,
     );
     setCustomers(updatedCustomers);
 
@@ -396,7 +396,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 let updatedData = [];
                 THALI_TYPE_SUPPORTED.forEach((thaliType) => {
                   let thaliTypeCustomers = newdata.filter(
-                    (c) => c.thaliType === thaliType
+                    (c) => c.thaliType === thaliType,
                   );
                   updatedData = [
                     ...updatedData,
@@ -411,12 +411,12 @@ function App({ isPublish, isFetchAllCustomers }) {
                 console.log("Newdata: ", newdata);
 
                 const response = await fetch(
-                  "http://localhost:4000/customers/serve/publish",
+                  "https://thedabbacentralapplication-xnig.vercel.app/customers/serve/publish",
                   {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ newdata, mealType }), // sending board state
-                  }
+                  },
                 );
                 const data = await response.json();
                 alert("✅ Publish triggered! Check backend logs.");
@@ -545,7 +545,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                           ))}
                       </ol>
                     </>
-                  )
+                  ),
               )}
             </div>
             <button
