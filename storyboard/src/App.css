@@ -1,8 +1,8 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
 }
 
 .logo {
@@ -45,9 +45,8 @@ button:disabled {
   cursor: not-allowed;
 }
 .app-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 20px;
+  width: calc(100% - 40px);
+  margin: 20px;
   box-sizing: border-box;
 }
 

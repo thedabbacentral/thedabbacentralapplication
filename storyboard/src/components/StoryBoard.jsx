@@ -57,6 +57,8 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
   const routes = Object.keys(columns);
   const [movingCard, setMovingCard] = useState(null);
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showWhatsappModal, setShowWhatsappModal] = useState(false);
+  const [selectedWhatsappRoute, setSelectedWhatsappRoute] = useState(null);
 
   const currentRoute = routes[currentRouteIndex];
 
@@ -383,6 +385,73 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
     });
 
     setGeneratedList(output.trim());
+  };
+
+  const whatsappModalBackdropStyle = {
+    position: "fixed",
+    inset: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2000,
+  };
+
+  const generateRouteMessage = (route) => {
+    let output = `🛣 ${route}\n\n`;
+
+    const cards = columns[route] || [];
+
+    let count = 1;
+
+    const allCustomers = [];
+
+    cards.forEach((card) => {
+      card.customers.forEach((c) => {
+        allCustomers.push({
+          ...c,
+          mapLink: card.mapLink,
+        });
+      });
+    });
+
+    const grouped = {};
+
+    allCustomers.forEach((c) => {
+      const key = c.mapLink || "No Map Link";
+
+      if (!grouped[key]) grouped[key] = [];
+
+      grouped[key].push(c);
+    });
+
+    Object.entries(grouped).forEach(([mapLink, group]) => {
+      group.forEach((c, index) => {
+        if (index === 0) {
+          output += `${count}. ${c.name} - ${c.phoneNumber || "No phone"} - ${
+            mealType === "lunch"
+              ? c.LunchSpecialNormal || "Normal"
+              : c.DinnerSpecialNormal || "Normal"
+          }\n`;
+
+          count++;
+        } else {
+          output += `${c.name} - ${c.phoneNumber || "No phone"} - ${
+            mealType === "lunch"
+              ? c.LunchSpecialNormal || "Normal"
+              : c.DinnerSpecialNormal || "Normal"
+          }\n`;
+        }
+      });
+
+      if (mapLink && mapLink !== "No Map Link") {
+        output += `${mapLink}\n`;
+      }
+
+      output += "\n";
+    });
+
+    return output.trim();
   };
 
   return (
@@ -919,6 +988,63 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
         </div>
       )}
 
+      {showWhatsappModal && (
+        <div
+          style={whatsappModalBackdropStyle}
+          onClick={() => setShowWhatsappModal(false)}
+        >
+          <div style={modalBoxStyle} onClick={(e) => e.stopPropagation()}>
+            <h2>Select Route</h2>
+
+            <p>Choose which delivery route to send.</p>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                marginTop: "20px",
+              }}
+            >
+              {routes.map((route) => (
+                <button
+                  key={route}
+                  style={{
+                    ...buttonStyle,
+                    background: "#25D366",
+                    color: "#fff",
+                  }}
+                  onClick={() => {
+                    const message = generateRouteMessage(route);
+
+                    window.open(
+                      `https://wa.me/?text=${encodeURIComponent(message)}`,
+                      "_blank",
+                    );
+
+                    setShowWhatsappModal(false);
+                  }}
+                >
+                  {route}
+                </button>
+              ))}
+            </div>
+
+            <button
+              style={{
+                ...buttonStyle,
+                background: "#f44336",
+                color: "#fff",
+                marginTop: "20px",
+              }}
+              onClick={() => setShowWhatsappModal(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Generated List Modal */}
       {generatedList && (
         <div style={modalBackdropStyle} onClick={() => setGeneratedList(null)}>
@@ -965,10 +1091,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
                   color: "#fff",
                 }}
                 onClick={() => {
-                  window.open(
-                    `https://wa.me/?text=${encodeURIComponent(generatedList)}`,
-                    "_blank",
-                  );
+                  setShowWhatsappModal(true);
                 }}
               >
                 💬 WhatsApp
