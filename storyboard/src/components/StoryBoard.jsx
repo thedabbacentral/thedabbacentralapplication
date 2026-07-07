@@ -336,6 +336,15 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
     setIsEditing(false);
   };
 
+  const MEAL_OPTIONS = [
+    "Normal",
+    "Special",
+    "Chicken",
+    "Paneer",
+    "3 CP",
+    "Tiffin",
+  ];
+
   const generateList = () => {
     let output = "";
 
@@ -454,6 +463,36 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
     return output.trim();
   };
 
+  const getMealCounts = () => {
+    const counts = {
+      Normal: 0,
+      Special: 0,
+      Chicken: 0,
+      Paneer: 0,
+      "3 CP": 0,
+      Tiffin: 0,
+    };
+
+    Object.values(columns).forEach((cards) => {
+      cards.forEach((card) => {
+        card.customers.forEach((customer) => {
+          const type =
+            mealType === "lunch"
+              ? customer.LunchSpecialNormal || "Normal"
+              : customer.DinnerSpecialNormal || "Normal";
+
+          if (counts[type] !== undefined) {
+            counts[type]++;
+          }
+        });
+      });
+    });
+
+    return counts;
+  };
+
+  const mealCounts = getMealCounts();
+
   return (
     <div
       style={{
@@ -568,6 +607,15 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
             Publish Route
           </button>
         </div>
+      </div>
+
+      <div className="meal-summary">
+        {Object.entries(mealCounts).map(([type, count]) => (
+          <div key={type} className="meal-summary-card">
+            <div className="meal-summary-title">{type}</div>
+            <div className="meal-summary-count">{count}</div>
+          </div>
+        ))}
       </div>
 
       {/* Columns */}
@@ -902,8 +950,11 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
                       }
                       className="border px-2 py-1 rounded w-full"
                     >
-                      <option value="Normal">Normal</option>
-                      <option value="Special">Special</option>
+                      {MEAL_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
                     </select>
                   ) : mealType === "lunch" ? (
                     c.LunchSpecialNormal || "Normal"
