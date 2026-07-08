@@ -62,6 +62,203 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
 
   const currentRoute = routes[currentRouteIndex];
 
+  const transformBackendData = (data) => {
+    const sortedColumns = {};
+
+    Object.entries(data).forEach(([columnId, cards]) => {
+      const sorted = [...cards].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      const groupedByMap = {};
+
+      sorted.forEach((c) => {
+        const key = c[`${mealType}MapLink`];
+
+        if (key) {
+          if (!groupedByMap[key]) groupedByMap[key] = [];
+          groupedByMap[key].push(c);
+        } else {
+          groupedByMap[c.id] = [c];
+        }
+      });
+
+      sortedColumns[columnId] = Object.entries(groupedByMap).map(
+        ([mapLinkOrId, group]) => ({
+          mapLink: group[0][`${mealType}MapLink`] || null,
+          customers: group,
+          id: group.map((g) => g.id).join("-"),
+        }),
+      );
+    });
+
+    return sortedColumns;
+  };
+
+  const getCustomerMap = (columnsData) => {
+    const customerMap = new Map();
+
+    Object.values(columnsData).forEach((cards) => {
+      cards.forEach((card) => {
+        card.customers.forEach((customer) => {
+          customerMap.set(customer.id, customer);
+        });
+      });
+    });
+
+    return customerMap;
+  };
+
+  const compareCustomers = (localColumns, backendColumns) => {
+    const localCustomers = getCustomerMap(localColumns);
+    const backendCustomers = getCustomerMap(backendColumns);
+
+    const addedCustomers = [];
+    const removedCustomers = [];
+
+    backendCustomers.forEach((customer, id) => {
+      if (!localCustomers.has(id)) {
+        addedCustomers.push(customer);
+      }
+    });
+
+    localCustomers.forEach((customer, id) => {
+      if (!backendCustomers.has(id)) {
+        removedCustomers.push(customer);
+      }
+    });
+
+    return {
+      addedCustomers,
+      removedCustomers,
+    };
+  };
+
+  const mergeColumns = (localColumns, backendColumns) => {
+    const localCustomerMap = getCustomerMap(localColumns);
+
+    const mergedColumns = {};
+
+    Object.entries(backendColumns).forEach(([route, cards]) => {
+      mergedColumns[route] = cards.map((card) => ({
+        ...card,
+        customers: card.customers.map((customer) => {
+          return localCustomerMap.get(customer.id) || customer;
+        }),
+      }));
+    });
+
+    return mergedColumns;
+  };
+
+  const removeCancelledCustomers = (localColumns, backendColumns) => {
+    const backendCustomers = getCustomerMap(backendColumns);
+
+    const updatedColumns = {};
+
+    Object.entries(localColumns).forEach(([route, cards]) => {
+      updatedColumns[route] = cards
+        .map((card) => ({
+          ...card,
+          customers: card.customers.filter((customer) =>
+            backendCustomers.has(customer.id),
+          ),
+        }))
+        .filter((card) => card.customers.length > 0);
+    });
+
+    return updatedColumns;
+  };
+
+  const addNewCustomers = (localColumns, backendColumns) => {
+    const localCustomerMap = getCustomerMap(localColumns);
+
+    // Clone local board
+    const updatedColumns = structuredClone(localColumns);
+
+    Object.entries(backendColumns).forEach(([route, backendCards]) => {
+      if (!updatedColumns[route]) {
+        updatedColumns[route] = [];
+      }
+
+      backendCards.forEach((backendCard) => {
+        backendCard.customers.forEach((customer) => {
+          // Already exists locally?
+          if (localCustomerMap.has(customer.id)) return;
+
+          // Find matching card (same mapLink)
+          let localCard = updatedColumns[route].find(
+            (c) => c.mapLink === backendCard.mapLink,
+          );
+
+          if (localCard) {
+            localCard.customers.push(customer);
+          } else {
+            updatedColumns[route].push({
+              id: backendCard.id,
+              mapLink: backendCard.mapLink,
+              customers: [customer],
+            });
+          }
+        });
+      });
+    });
+
+    return updatedColumns;
+  };
+
+  const regenerateCardIds = (columnsData) => {
+    const updated = structuredClone(columnsData);
+
+    Object.values(updated).forEach((cards) => {
+      cards.forEach((card) => {
+        card.id = card.customers
+          .map((c) => c.id)
+          .sort()
+          .join("-");
+      });
+    });
+
+    return updated;
+  };
+
+  const syncData = async () => {
+    try {
+      setFetching(true);
+
+      const res = await axios.get(
+        `https://thedabbacentralapplication-vo2b.vercel.app/customers/${mealType}${
+          isFetchAllCustomers ? "/all" : ""
+        }`,
+      );
+
+      const transformed = transformBackendData(res.data);
+
+      const diff = compareCustomers(columns, transformed);
+
+      console.log("Added:", diff.addedCustomers);
+      console.log("Removed:", diff.removedCustomers);
+
+      const merged = mergeColumns(columns, transformed);
+
+      setColumns(merged);
+
+      const withoutCancelled = removeCancelledCustomers(columns, transformed);
+
+      const synced = addNewCustomers(withoutCancelled, transformed);
+
+      const finalColumns = regenerateCardIds(synced);
+
+      alert(
+        `Sync Complete\n\n+${diff.addedCustomers.length} Added\n-${diff.removedCustomers.length} Removed`,
+      );
+
+      setColumns(finalColumns);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setFetching(false);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setFetching(true);
@@ -71,35 +268,15 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
         }`,
       );
 
-      const sortedColumns = {};
-      Object.entries(res.data).forEach(([columnId, cards]) => {
-        const sorted = [...cards].sort(
-          (a, b) => (a.order || 0) - (b.order || 0),
-        );
+      const transformed = transformBackendData(res.data);
 
-        // Group only if mapLink exists
-        const groupedByMap = {};
-        sorted.forEach((c) => {
-          const key = c[`${mealType}MapLink`];
-          if (key) {
-            if (!groupedByMap[key]) groupedByMap[key] = [];
-            groupedByMap[key].push(c);
-          } else {
-            // Customers without mapLink become their own "group"
-            groupedByMap[c.id] = [c];
-          }
-        });
+      const diff = compareCustomers(columns, transformed);
 
-        sortedColumns[columnId] = Object.entries(groupedByMap).map(
-          ([mapLinkOrId, group]) => ({
-            mapLink: group[0][`${mealType}MapLink`] || null,
-            customers: group,
-            id: group.map((g) => g.id).join("-"),
-          }),
-        );
-      });
+      console.log("Added:", diff.addedCustomers);
 
-      setColumns(sortedColumns);
+      console.log("Removed:", diff.removedCustomers);
+
+      setColumns(transformed);
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -545,6 +722,16 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
             disabled={fetching}
           >
             Generate List
+          </button>
+          <button
+            style={{
+              ...buttonStyle,
+              background: "#17a2b8",
+              color: "#fff",
+            }}
+            onClick={syncData}
+          >
+            Sync
           </button>
           <button
             onClick={async () => {
