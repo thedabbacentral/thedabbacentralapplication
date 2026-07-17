@@ -5,15 +5,15 @@ import dotenv from "dotenv";
 import { Client } from "@notionhq/client";
 
 dotenv.config();
-
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
-const databaseId = process.env.NOTION_DB_ID;
-const cancellationDbId = process.env.NOTION_CANCELLATION_DB_ID;
-const extrasDbId = process.env.NOTION_EXTRAMEAL_DB_ID;
+const databaseId = process.env.MAIN_DATABASE_ID;
+const cancellationDbId = process.env.CANCELLATION_DB_ID;
+const extrasDbId = process.env.EXTRA_MEAL_DB_ID;
+const dailyCustomizationDbId = process.env.NOTION_DAILY_CUSTOMIZATION_DB_ID;
 
 /**
  * Get the primary data source id for a database (v5 style)
@@ -171,12 +171,73 @@ async function fetchTodayExtras() {
   return extras;
 }
 
+async function fetchTodayCustomizationChanges() {
+  console.log("🔥 fetchTodayCustomizationChanges called");
+  const dataSourceId = await getPrimaryDataSourceId(dailyCustomizationDbId);
+
+  if (!dataSourceId) {
+    throw new Error("No data source found for Daily Customization DB");
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const changes = [];
+
+  let cursor = undefined;
+
+  do {
+    const resp = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      page_size: 100,
+      start_cursor: cursor,
+      filter: {
+        and: [
+          {
+            property: "Date",
+            date: {
+              equals: today,
+            },
+          },
+        ],
+      },
+    });
+
+    (resp.results || []).forEach((page) => {
+      const props = page.properties || {};
+
+      const customerId = props["The Dabba Central Database"]?.relation?.[0]?.id;
+
+      const meal = props["Select"]?.select?.name;
+
+      const customisation =
+        props["Changed Customization"]?.rich_text?.[0]?.plain_text ??
+        props["Changed Customization"]?.title?.[0]?.plain_text ??
+        "";
+
+      if (customerId && meal && customisation) {
+        changes.push({
+          customerId,
+          meal,
+          customisation,
+        });
+      }
+    });
+
+    cursor = resp.next_cursor;
+  } while (cursor);
+
+  console.log("Today's Customisation Changes:", changes);
+
+  return changes;
+}
+
 /* -------------------- FETCH CUSTOMERS BY MEAL -------------------- */
 /**
  * Fetch active + trial customers for given mealType (Lunch / Dinner).
  * Uses dataSources.query on the main DB data source (no databases.query).
  */
 async function fetchCustomersByMeal(mealType, listtype) {
+  console.log("🚀 fetchCustomersByMeal", mealType, listtype);
   const dataSourceId = await getPrimaryDataSourceId(databaseId);
   if (!dataSourceId) throw new Error("No data source found for main DB");
 
@@ -221,6 +282,16 @@ async function fetchCustomersByMeal(mealType, listtype) {
   // fetch cancellations & extras (these both use their own dataSources)
   const cancelled = await fetchTodayCancellations();
   const extras = await fetchTodayExtras();
+  const customizationChanges = await fetchTodayCustomizationChanges();
+
+  const customizationMap = new Map();
+
+  customizationChanges.forEach((change) => {
+    customizationMap.set(
+      `${change.customerId}-${change.meal}`,
+      change.customisation,
+    );
+  });
 
   // Map allPages => customers (apply trial override)
   const customers = allPages
@@ -235,6 +306,26 @@ async function fetchCustomersByMeal(mealType, listtype) {
         if (mealType === "Lunch") cust.LunchSpecialNormal = "Paneer";
         if (mealType === "Dinner") cust.DinnerSpecialNormal = "Paneer";
       }
+
+      const dailyCustomization = customizationMap.get(`${cust.id}-${mealType}`);
+
+      if (dailyCustomization) {
+        if (mealType === "Lunch") {
+          cust.customisationLunch = dailyCustomization;
+        } else {
+          cust.customisationDinner = dailyCustomization;
+        }
+
+        cust.dailyCustomization = true;
+      }
+
+      console.log({
+        name: cust.name,
+        id: cust.id,
+        lunch: cust.customisationLunch,
+        dinner: cust.customisationDinner,
+        daily: cust.dailyCustomization,
+      });
 
       return cust;
     })
@@ -251,7 +342,7 @@ async function fetchCustomersByMeal(mealType, listtype) {
       cust.route = "Unassigned";
       customers.push(cust);
       console.log(
-        `✅ Adding Extra (found in main pages): ${cust.name} ${mealType}`
+        `✅ Adding Extra (found in main pages): ${cust.name} ${mealType}`,
       );
     } else {
       // fallback: try pages.retrieve (may fail if integration lacks permissions)
@@ -261,13 +352,13 @@ async function fetchCustomersByMeal(mealType, listtype) {
         cust.route = "Unassigned";
         customers.push(cust);
         console.log(
-          `✅ Adding Extra (via pages.retrieve): ${cust.name} ${mealType}`
+          `✅ Adding Extra (via pages.retrieve): ${cust.name} ${mealType}`,
         );
       } catch (err) {
         console.error(
           "❌ Failed to fetch extra meal customer:",
           mainId,
-          err.message
+          err.message,
         );
       }
     }
@@ -381,6 +472,8 @@ app.get("/customers/serve/lunch", async (req, res) => {
     return res.json(customers);
   } catch (err) {
     console.error("❌ Error in /customers/serve/lunch:", err?.message ?? err);
+    console.error("Full Error:", err);
+    console.error("Stack:", err.stack);
     return res.status(500).json({
       error: "Failed to fetch serve lunch customers",
       details: err?.message,
@@ -395,7 +488,7 @@ app.get("/customers/serve/lunch/all", async (req, res) => {
   } catch (err) {
     console.error(
       "❌ Error in /customers/serve/lunch/all:",
-      err?.message ?? err
+      err?.message ?? err,
     );
     return res.status(500).json({
       error: "Failed to fetch serve lunch customers",
@@ -449,7 +542,7 @@ app.get("/customers/serve/dinner/all", async (req, res) => {
   } catch (err) {
     console.error(
       "❌ Error in /customers/serve/dinner/all:",
-      err?.message ?? err
+      err?.message ?? err,
     );
     return res.status(500).json({
       error: "Failed to fetch serve dinner customers",

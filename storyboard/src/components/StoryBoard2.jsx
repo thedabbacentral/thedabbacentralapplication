@@ -3,6 +3,8 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import "./StoryBoard2.css";
+const API_URL = "http://localhost:4000";
+// const API_URL = "https://thedabbacentralapplication.onrender.com";
 
 const buttonStyle = {
   padding: "8px 16px",
@@ -48,7 +50,7 @@ function App({ isPublish, isFetchAllCustomers }) {
     try {
       setFetching(true);
       const resp = await axios.get(
-        `https://thedabbacentralapplication.onrender.com/customers/serve/${mealType}${
+        `${API_URL}/customers/serve/${mealType}${
           isFetchAllCustomers ? "/all" : ""
         }`,
       );
@@ -87,6 +89,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 id: customer.id,
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
+                dailyCustomization: customer.dailyCustomization || false,
               }
             : {
                 thaliType:
@@ -102,6 +105,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 id: customer.id,
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
+                dailyCustomization: customer.dailyCustomization || false,
               },
         )
         ?.sort((a, b) => a.serveOrder - b.serveOrder);
@@ -121,6 +125,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 id: customer.id,
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
+                dailyCustomization: customer.dailyCustomization || false,
               }
             : {
                 thaliType:
@@ -134,6 +139,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 id: customer.id,
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
+                dailyCustomization: customer.dailyCustomization || false,
               },
         )
         ?.sort((a, b) => a.serveOrder - b.serveOrder);
@@ -415,7 +421,7 @@ function App({ isPublish, isFetchAllCustomers }) {
                 console.log("Newdata: ", newdata);
 
                 const response = await fetch(
-                  "https://thedabbacentralapplication.onrender.com/customers/serve/publish",
+                  `${API_URL}/customers/serve/publish`,
                   {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -469,6 +475,10 @@ function App({ isPublish, isFetchAllCustomers }) {
                               <div
                                 className={`card ${
                                   snapshot.isDragging ? "dragging" : ""
+                                } ${
+                                  customer.dailyCustomization
+                                    ? "daily-change"
+                                    : ""
                                 }`}
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import "./StoryBoard.css";
+
+const API_URL = "http://localhost:4000";
 const colors = [
   { bg: "#E0F7FA", header: "#00ACC1" },
   { bg: "#FFF3E0", header: "#FB8C00" },
@@ -225,9 +227,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
       setFetching(true);
 
       const res = await axios.get(
-        `https://thedabbacentralapplication.onrender.com/customers/${mealType}${
-          isFetchAllCustomers ? "/all" : ""
-        }`,
+        `${API_URL}/customers/${mealType}${isFetchAllCustomers ? "/all" : ""}`,
       );
 
       const transformed = transformBackendData(res.data);
@@ -263,9 +263,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
     try {
       setFetching(true);
       const res = await axios.get(
-        `https://thedabbacentralapplication.onrender.com/customers/${mealType}${
-          isFetchAllCustomers ? "/all" : ""
-        }`,
+        `${API_URL}/customers/${mealType}${isFetchAllCustomers ? "/all" : ""}`,
       );
 
       const transformed = transformBackendData(res.data);
@@ -463,14 +461,11 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
   const updateSingleCustomer = async (customer) => {
     console.log("Customer: ", customer);
     try {
-      const response = await fetch(
-        "https://thedabbacentralapplication.onrender.com/customer/update",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ customer, mealType }), // sending board state
-        },
-      );
+      const response = await fetch(`${API_URL}/customer/update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer, mealType }), // sending board state
+      });
       if (response.ok) {
         alert("✅ Customer updated!");
         return true;
@@ -766,7 +761,7 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
                 });
                 newdata = newdata?.flat();
                 const response = await fetch(
-                  "https://thedabbacentralapplication.onrender.com/customers/route/publish",
+                  `${API_URL}/customers/route/publish`,
                   {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },

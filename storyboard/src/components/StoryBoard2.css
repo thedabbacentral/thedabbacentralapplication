@@ -174,3 +174,12 @@ button:disabled {
     width: 100%;
   }
 }
+
+.daily-change {
+  border: 3px solid #ff9800;
+  background: #fff8e1;
+}
+
+.daily-change {
+  border-left: 6px solid #ff9800;
+}
