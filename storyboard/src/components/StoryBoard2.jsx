@@ -470,8 +470,11 @@ Skipped Inactive: ${result.skippedInactive}`,
           >
             Publish Route
           </button>
-          <button onClick={applyFixedCancellations}>
-            Apply Fixed Cancellations
+          <button
+            className="fixed-cancellations-btn"
+            onClick={applyFixedCancellations}
+          >
+            🚫 Apply Fixed Cancellations
           </button>
         </div>
       </div>

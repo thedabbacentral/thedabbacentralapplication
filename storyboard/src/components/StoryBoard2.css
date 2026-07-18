@@ -188,3 +188,35 @@ button:disabled {
   background: #fff3cd;
   border: 2px solid #ffc107;
 }
+.fixed-cancellations-btn {
+  background: #ff416e;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+}
+
+.fixed-cancellations-btn:hover {
+  background: #ff416e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(245, 158, 11, 0.4);
+}
+
+.fixed-cancellations-btn:active {
+  transform: translateY(0);
+}
+
+.fixed-cancellations-btn:disabled {
+  background: #d1d5db;
+  color: #6b7280;
+  cursor: not-allowed;
+  box-shadow: none;
+}
