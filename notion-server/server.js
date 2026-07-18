@@ -9,10 +9,11 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "http://localhost:5173", // Local React app
-      "https://thedabbacentralapplication.onrender.com", // Your Vercel app
+      "http://localhost:5173",
+      "https://thedabbacentralapplication.vercel.app",
+      "https://thedabbacentralapplication-nx9b.vercel.app",
     ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   }),
 );
