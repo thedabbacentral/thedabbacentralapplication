@@ -94,6 +94,37 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
 
     return sortedColumns;
   };
+  const applyLocationChanges = (board) => {
+    const updatedBoard = structuredClone(board);
+
+    if (!updatedBoard["Unassigned"]) {
+      updatedBoard["Unassigned"] = [];
+    }
+
+    Object.keys(updatedBoard).forEach((route) => {
+      if (route === "Unassigned") return;
+
+      const cards = updatedBoard[route];
+
+      cards.forEach((card) => {
+        card.customers = card.customers.filter((customer) => {
+          if (!customer.locationChanged) return true;
+
+          updatedBoard["Unassigned"].push({
+            id: customer.id,
+            mapLink: customer.changedMapLink,
+            customers: [customer],
+          });
+
+          return false;
+        });
+      });
+
+      updatedBoard[route] = cards.filter((card) => card.customers.length > 0);
+    });
+
+    return updatedBoard;
+  };
 
   const getCustomerMap = (columnsData) => {
     const customerMap = new Map();
@@ -232,18 +263,22 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
 
       const transformed = transformBackendData(res.data);
 
-      const diff = compareCustomers(columns, transformed);
+      const finalData = applyLocationChanges(transformed);
+
+      setColumns(finalData);
+
+      const diff = compareCustomers(columns, finalData);
 
       console.log("Added:", diff.addedCustomers);
       console.log("Removed:", diff.removedCustomers);
 
-      const merged = mergeColumns(columns, transformed);
+      const merged = mergeColumns(columns, finalData);
 
       setColumns(merged);
 
-      const withoutCancelled = removeCancelledCustomers(columns, transformed);
+      const withoutCancelled = removeCancelledCustomers(columns, finalData);
 
-      const synced = addNewCustomers(withoutCancelled, transformed);
+      const synced = addNewCustomers(withoutCancelled, finalData);
 
       const finalColumns = regenerateCardIds(synced);
 
@@ -268,13 +303,14 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
 
       const transformed = transformBackendData(res.data);
 
-      const diff = compareCustomers(columns, transformed);
+      const finalData = applyLocationChanges(transformed);
+
+      setColumns(finalData);
+
+      const diff = compareCustomers(columns, finalData);
 
       console.log("Added:", diff.addedCustomers);
-
       console.log("Removed:", diff.removedCustomers);
-
-      setColumns(transformed);
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -843,7 +879,20 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
                     onClick={() => setSelectedCard(card)}
                   >
                     {card.customers.map((c) => (
-                      <div key={c.id}>
+                      <div
+                        key={c.id}
+                        style={{
+                          background: c.locationChanged
+                            ? "#FFF3CD"
+                            : "transparent",
+                          border: c.locationChanged
+                            ? "2px solid #FFC107"
+                            : "none",
+                          borderRadius: "6px",
+                          padding: "4px",
+                          marginBottom: "4px",
+                        }}
+                      >
                         <strong>{c.name}</strong>
 
                         <br />
@@ -979,7 +1028,20 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
                               }}
                             >
                               {card.customers.map((c) => (
-                                <div key={c.id}>
+                                <div
+                                  key={c.id}
+                                  style={{
+                                    background: c.locationChanged
+                                      ? "#FFF3CD"
+                                      : "transparent",
+                                    border: c.locationChanged
+                                      ? "2px solid orange"
+                                      : "none",
+                                    borderRadius: 6,
+                                    padding: 4,
+                                    marginBottom: 4,
+                                  }}
+                                >
                                   {c.name} - {c.phoneNumber || "No phone"} -{" "}
                                   {mealType === "lunch"
                                     ? c.LunchSpecialNormal || "Normal"

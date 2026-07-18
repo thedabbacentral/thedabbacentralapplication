@@ -14,6 +14,7 @@ const databaseId = process.env.MAIN_DATABASE_ID;
 const cancellationDbId = process.env.CANCELLATION_DB_ID;
 const extrasDbId = process.env.EXTRA_MEAL_DB_ID;
 const dailyCustomizationDbId = process.env.NOTION_DAILY_CUSTOMIZATION_DB_ID;
+const locationChangeDbId = process.env.LOCATION_CHANGE_DB_ID;
 
 /**
  * Get the primary data source id for a database (v5 style)
@@ -231,6 +232,47 @@ async function fetchTodayCustomizationChanges() {
   return changes;
 }
 
+async function fetchTodayLocationChanges() {
+  console.log("🔥 fetchTodayLocationChanges called");
+  const dataSourceId = await getPrimaryDataSourceId(locationChangeDbId);
+
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      property: "Date",
+      date: {
+        equals: today,
+      },
+    },
+  });
+
+  const changes = [];
+
+  for (const page of response.results) {
+    const props = page.properties;
+
+    const customerId = props["Customer"]?.relation?.[0]?.id;
+    const meal = props["Meal Type"]?.select?.name;
+    const mapLink = props["Changed Location Link"]?.url || "";
+
+    if (!customerId || !meal) continue;
+
+    changes.push({
+      customerId,
+      meal,
+      mapLink,
+    });
+  }
+
+  console.log("Today's Location Changes:", changes);
+
+  return changes;
+}
+
 /* -------------------- FETCH CUSTOMERS BY MEAL -------------------- */
 /**
  * Fetch active + trial customers for given mealType (Lunch / Dinner).
@@ -283,6 +325,7 @@ async function fetchCustomersByMeal(mealType, listtype) {
   const cancelled = await fetchTodayCancellations();
   const extras = await fetchTodayExtras();
   const customizationChanges = await fetchTodayCustomizationChanges();
+  const locationChanges = await fetchTodayLocationChanges();
 
   const customizationMap = new Map();
 
@@ -291,6 +334,12 @@ async function fetchCustomersByMeal(mealType, listtype) {
       `${change.customerId}-${change.meal}`,
       change.customisation,
     );
+  });
+
+  const locationMap = new Map();
+
+  locationChanges.forEach((change) => {
+    locationMap.set(`${change.customerId}-${change.meal}`, change.mapLink);
   });
 
   // Map allPages => customers (apply trial override)
@@ -319,13 +368,26 @@ async function fetchCustomersByMeal(mealType, listtype) {
         cust.dailyCustomization = true;
       }
 
+      // console.log({
+      //   name: cust.name,
+      //   id: cust.id,
+      //   lunch: cust.customisationLunch,
+      //   dinner: cust.customisationDinner,
+      //   daily: cust.dailyCustomization,
+      // });
+
+      const changedLocation = locationMap.get(`${cust.id}-${mealType}`);
+
       console.log({
-        name: cust.name,
-        id: cust.id,
-        lunch: cust.customisationLunch,
-        dinner: cust.customisationDinner,
-        daily: cust.dailyCustomization,
+        customer: cust.name,
+        key: `${cust.id}-${mealType}`,
+        changedLocation,
       });
+
+      if (changedLocation) {
+        cust.locationChanged = true;
+        cust.changedMapLink = changedLocation;
+      }
 
       return cust;
     })

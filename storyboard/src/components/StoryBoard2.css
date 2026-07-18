@@ -183,3 +183,8 @@ button:disabled {
 .daily-change {
   border-left: 6px solid #ff9800;
 }
+
+.location-change {
+  background: #fff3cd;
+  border: 2px solid #ffc107;
+}

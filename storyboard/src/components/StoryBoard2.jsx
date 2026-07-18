@@ -92,13 +92,16 @@ function App({ isPublish, isFetchAllCustomers }) {
                 dailyCustomization: customer.dailyCustomization || false,
               }
             : {
-                thaliType:
-                  customer.foodPreference === "Non-Veg"
+                thaliType: customer.locationChanged
+                  ? "Unassigned"
+                  : customer.foodPreference === "Non-Veg"
                     ? "Chicken"
-                    : customer.DinnerSpecialNormal === "Normal" ||
-                        customer.dinnerServeOrder
-                      ? (customer.DinnerSpecialNormal ?? "Unassigned")
-                      : "Unassigned",
+                    : customer.LunchSpecialNormal === "Paneer"
+                      ? "Normal"
+                      : customer.LunchSpecialNormal === "Normal" ||
+                          customer.lunchServeOrder
+                        ? (customer.LunchSpecialNormal ?? "Unassigned")
+                        : "Unassigned",
                 serveOrder: customer.dinnerServeOrder ?? 0,
                 customisation: customer.customisationDinner ?? "",
                 poster: customer.poster,
