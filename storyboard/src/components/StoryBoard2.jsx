@@ -45,7 +45,6 @@ function App({ isPublish, isFetchAllCustomers }) {
         "3CP",
         "Container",
       ];
-
   const fetchCustomers = async () => {
     try {
       setFetching(true);
@@ -61,6 +60,33 @@ function App({ isPublish, isFetchAllCustomers }) {
       setError("Failed to fetch customers");
     } finally {
       setFetching(false);
+    }
+  };
+
+  const applyFixedCancellations = async () => {
+    console.log("mealType:", mealType);
+    try {
+      const response = await fetch(`${API_URL}/templates/apply-cancellations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          meal: mealType, // "Lunch" or "Dinner"
+        }),
+      });
+
+      const result = await response.json();
+      console.log(result);
+
+      alert(
+        `Applied: ${result.applied}
+Skipped Duplicate: ${result.skippedDuplicate}
+Skipped Inactive: ${result.skippedInactive}`,
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to apply fixed cancellations");
     }
   };
 
@@ -443,6 +469,9 @@ function App({ isPublish, isFetchAllCustomers }) {
             }
           >
             Publish Route
+          </button>
+          <button onClick={applyFixedCancellations}>
+            Apply Fixed Cancellations
           </button>
         </div>
       </div>

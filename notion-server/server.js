@@ -15,6 +15,203 @@ const cancellationDbId = process.env.CANCELLATION_DB_ID;
 const extrasDbId = process.env.EXTRA_MEAL_DB_ID;
 const dailyCustomizationDbId = process.env.NOTION_DAILY_CUSTOMIZATION_DB_ID;
 const locationChangeDbId = process.env.LOCATION_CHANGE_DB_ID;
+const templateDbId = process.env.TEMPLATE_DB_ID;
+
+async function fetchTodayFixedCancellations(mealType) {
+  console.log("🔥 fetchTodayFixedCancellations called");
+
+  const dataSourceId = await getPrimaryDataSourceId(templateDbId);
+
+  if (!dataSourceId) {
+    throw new Error("No data source found for Template DB");
+  }
+
+  const todayDay = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    timeZone: "Asia/Kolkata",
+  });
+
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      and: [
+        {
+          property: "Day",
+          select: {
+            equals: todayDay,
+          },
+        },
+        {
+          property: "Meal",
+          select: {
+            equals: mealType,
+          },
+        },
+        {
+          property: "Type",
+          select: {
+            equals: "Cancellation",
+          },
+        },
+      ],
+    },
+  });
+
+  const customers = [];
+
+  for (const page of response.results) {
+    const props = page.properties;
+
+    const customerId = props["Customer"]?.relation?.[0]?.id;
+
+    if (!customerId) continue;
+
+    customers.push(customerId);
+  }
+
+  console.log("Today's Fixed Cancellation Customers:", customers);
+
+  return customers;
+}
+
+async function applyFixedCancellations(mealType) {
+  const appliedCustomers = [];
+  const duplicateCustomers = [];
+  const inactiveCustomers = [];
+  console.log("🚀 Applying Fixed Cancellations");
+
+  const customerIds = await fetchTodayFixedCancellations(mealType);
+
+  // Existing cancellations for today
+  const cancelledToday = await fetchTodayCancellations();
+
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+
+  let applied = 0;
+  let skippedDuplicate = 0;
+  let skippedInactive = 0;
+
+  for (const customerId of customerIds) {
+    const customer = await notion.pages.retrieve({
+      page_id: customerId,
+    });
+
+    const props = customer.properties;
+
+    const customerName =
+      props["Customer Name"]?.title?.[0]?.plain_text ??
+      props["Customer Name"]?.rich_text?.[0]?.plain_text ??
+      "Unknown";
+
+    // Skip duplicate
+    if (cancelledToday.has(`${customerId}-${mealType}`)) {
+      skippedDuplicate++;
+      duplicateCustomers.push(customerName);
+      continue;
+    }
+
+    const startDate = props["Start Date"]?.date?.start;
+    const endDate = props["End Date"]?.date?.start;
+
+    const mealTypes = (props["Meal Type"]?.multi_select || []).map(
+      (m) => m.name,
+    );
+
+    const active =
+      startDate <= today && endDate >= today && mealTypes.includes(mealType);
+
+    if (!active) {
+      skippedInactive++;
+      inactiveCustomers.push(customerName);
+      continue;
+    }
+
+    await notion.pages.create({
+      parent: {
+        database_id: cancellationDbId,
+      },
+      properties: {
+        "The Dabba Central Database": {
+          relation: [
+            {
+              id: customerId,
+            },
+          ],
+        },
+
+        Meal: {
+          select: {
+            name: mealType,
+          },
+        },
+
+        "Cancellation Date": {
+          date: {
+            start: today,
+          },
+        },
+      },
+    });
+
+    applied++;
+    appliedCustomers.push(customerName);
+
+    console.log("✅ Cancellation Created");
+  }
+
+  return {
+    applied,
+    skippedDuplicate,
+    skippedInactive,
+    appliedCustomers,
+    duplicateCustomers,
+    inactiveCustomers,
+  };
+}
+
+app.get("/test-apply-cancellations", async (req, res) => {
+  const result = await applyFixedCancellations("Lunch");
+  res.json(result);
+});
+
+app.get("/test-fixed-cancellations", async (req, res) => {
+  try {
+    const data = await fetchTodayFixedCancellations("Lunch");
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json(err.message);
+  }
+});
+
+app.post("/templates/apply-cancellations", async (req, res) => {
+  try {
+    const mealMap = {
+      lunch: "Lunch",
+      dinner: "Dinner",
+    };
+
+    const meal = mealMap[req.body.meal?.toLowerCase()];
+
+    if (!meal) {
+      return res.status(400).json({
+        error: "Invalid meal",
+      });
+    }
+
+    const result = await applyFixedCancellations(meal);
+
+    return res.json(result);
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      error: err.message,
+    });
+  }
+});
 
 /**
  * Get the primary data source id for a database (v5 style)
