@@ -3,8 +3,8 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import "./StoryBoard2.css";
-// const API_URL = "http://localhost:4000";
-const API_URL = "https://thedabbacentralapplication.onrender.com";
+const API_URL = "http://localhost:4000";
+// const API_URL = "https://thedabbacentralapplication.onrender.com";
 
 const buttonStyle = {
   padding: "8px 16px",
@@ -63,30 +63,40 @@ function App({ isPublish, isFetchAllCustomers }) {
     }
   };
 
-  const applyFixedCancellations = async () => {
+  const applyTemplates = async () => {
     console.log("mealType:", mealType);
+
     try {
-      const response = await fetch(`${API_URL}/templates/apply-cancellations`, {
+      const response = await fetch(`${API_URL}/templates/apply`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          meal: mealType, // "Lunch" or "Dinner"
+          meal: mealType,
         }),
       });
 
       const result = await response.json();
+      await fetchCustomers();
       console.log(result);
 
-      alert(
-        `Applied: ${result.applied}
-Skipped Duplicate: ${result.skippedDuplicate}
-Skipped Inactive: ${result.skippedInactive}`,
-      );
+      alert(`
+Templates Applied Successfully
+
+Cancellations
+Applied: ${result.cancellations.applied}
+Skipped Duplicate: ${result.cancellations.skippedDuplicate}
+Skipped Inactive: ${result.cancellations.skippedInactive}
+
+Extra Meals
+Applied: ${result.extras.applied}
+Skipped Duplicate: ${result.extras.skippedDuplicate}
+Skipped Inactive: ${result.extras.skippedInactive}
+`);
     } catch (err) {
       console.error(err);
-      alert("Failed to apply fixed cancellations");
+      alert("Failed to apply templates");
     }
   };
 
@@ -470,11 +480,8 @@ Skipped Inactive: ${result.skippedInactive}`,
           >
             Publish Route
           </button>
-          <button
-            className="fixed-cancellations-btn"
-            onClick={applyFixedCancellations}
-          >
-            🚫 Apply Fixed Cancellations
+          <button className="fixed-cancellations-btn" onClick={applyTemplates}>
+            🚫 Apply Templates
           </button>
         </div>
       </div>

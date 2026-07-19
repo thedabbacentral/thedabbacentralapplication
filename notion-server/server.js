@@ -84,7 +84,120 @@ async function fetchTodayFixedCancellations(mealType) {
   return customers;
 }
 
-async function applyFixedCancellations(mealType) {
+async function fetchTodayTemplateExtraMeals(mealType) {
+  console.log("🔥 fetchTodayTemplateExtraMeals called");
+
+  const dataSourceId = await getPrimaryDataSourceId(templateDbId);
+
+  if (!dataSourceId) {
+    throw new Error("No data source found for Template DB");
+  }
+
+  const todayDay = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    timeZone: "Asia/Kolkata",
+  });
+
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      and: [
+        {
+          property: "Day",
+          select: {
+            equals: todayDay,
+          },
+        },
+        {
+          property: "Meal",
+          select: {
+            equals: mealType,
+          },
+        },
+        {
+          property: "Type",
+          select: {
+            equals: "Extra Meal",
+          },
+        },
+      ],
+    },
+  });
+
+  const customers = [];
+
+  for (const page of response.results) {
+    const props = page.properties;
+
+    const customerId = props["Customer"]?.relation?.[0]?.id;
+
+    if (!customerId) continue;
+
+    customers.push(customerId);
+  }
+
+  console.log("Today's Fixed Extra Meal Customers:", customers);
+
+  return customers;
+}
+
+async function fetchTodayTemplateNonVeg(mealType) {
+  console.log("🔥 fetchTodayTemplateExtraMeals called");
+
+  const dataSourceId = await getPrimaryDataSourceId(templateDbId);
+
+  if (!dataSourceId) {
+    throw new Error("No data source found for Template DB");
+  }
+
+  const todayDay = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    timeZone: "Asia/Kolkata",
+  });
+
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    filter: {
+      and: [
+        {
+          property: "Day",
+          select: {
+            equals: todayDay,
+          },
+        },
+        {
+          property: "Meal",
+          select: {
+            equals: mealType,
+          },
+        },
+        {
+          property: "Type",
+          select: {
+            equals: "Non-Veg",
+          },
+        },
+      ],
+    },
+  });
+
+  const customers = [];
+
+  for (const page of response.results) {
+    const props = page.properties;
+
+    const customerId = props["Customer"]?.relation?.[0]?.id;
+
+    if (!customerId) continue;
+
+    customers.push(customerId);
+  }
+
+  console.log("Today's Fixed Extra Meal Customers:", customers);
+
+  return customers;
+}
+async function applyTemplateCancellations(mealType) {
   const appliedCustomers = [];
   const duplicateCustomers = [];
   const inactiveCustomers = [];
@@ -181,22 +294,109 @@ async function applyFixedCancellations(mealType) {
   };
 }
 
-app.get("/test-apply-cancellations", async (req, res) => {
-  const result = await applyFixedCancellations("Lunch");
-  res.json(result);
-});
+async function applyTemplateExtraMeals(mealType) {
+  const appliedCustomers = [];
+  const duplicateCustomers = [];
+  const inactiveCustomers = [];
+  console.log("🚀 Applying Fixed Extra Meals");
 
-app.get("/test-fixed-cancellations", async (req, res) => {
-  try {
-    const data = await fetchTodayFixedCancellations("Lunch");
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json(err.message);
+  const customerIds = await fetchTodayTemplateExtraMeals(mealType);
+
+  // Existing cancellations for today
+  const extrasToday = await fetchTodayExtras();
+
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+
+  let applied = 0;
+  let skippedDuplicate = 0;
+  let skippedInactive = 0;
+
+  const extraSet = new Set(
+    extrasToday.map((extra) => `${extra.id}-${extra.mealType}`),
+  );
+
+  for (const customerId of customerIds) {
+    const customer = await notion.pages.retrieve({
+      page_id: customerId,
+    });
+
+    const props = customer.properties;
+
+    const customerName =
+      props["Customer Name"]?.title?.[0]?.plain_text ??
+      props["Customer Name"]?.rich_text?.[0]?.plain_text ??
+      "Unknown";
+
+    // Skip duplicate
+    if (extraSet.has(`${customerId}-${mealType}`)) {
+      skippedDuplicate++;
+      duplicateCustomers.push(customerName);
+      continue;
+    }
+
+    const startDate = props["Start Date"]?.date?.start;
+    const endDate =
+      props["End Date"]?.date?.end ?? props["End Date"]?.date?.start;
+
+    const mealTypes = (props["Meal Type"]?.multi_select || []).map(
+      (m) => m.name,
+    );
+
+    const active =
+      startDate <= today && endDate >= today && mealTypes.includes(mealType);
+
+    if (!active) {
+      skippedInactive++;
+      inactiveCustomers.push(customerName);
+      continue;
+    }
+
+    await notion.pages.create({
+      parent: {
+        database_id: extrasDbId,
+      },
+      properties: {
+        "The Dabba Central Database": {
+          relation: [
+            {
+              id: customerId,
+            },
+          ],
+        },
+
+        "Meal Type": {
+          select: {
+            name: mealType,
+          },
+        },
+
+        Date: {
+          date: {
+            start: today,
+          },
+        },
+      },
+    });
+
+    applied++;
+    appliedCustomers.push(customerName);
+
+    console.log("✅ Extra Meal Created");
   }
-});
 
-app.post("/templates/apply-cancellations", async (req, res) => {
+  return {
+    applied,
+    skippedDuplicate,
+    skippedInactive,
+    appliedCustomers,
+    duplicateCustomers,
+    inactiveCustomers,
+  };
+}
+
+app.post("/templates/apply", async (req, res) => {
   try {
     const mealMap = {
       lunch: "Lunch",
@@ -211,9 +411,14 @@ app.post("/templates/apply-cancellations", async (req, res) => {
       });
     }
 
-    const result = await applyFixedCancellations(meal);
+    const cancellations = await applyTemplateCancellations(meal);
 
-    return res.json(result);
+    const extras = await applyTemplateExtraMeals(meal);
+
+    return res.json({
+      cancellations,
+      extras,
+    });
   } catch (err) {
     console.error(err);
 
@@ -533,6 +738,8 @@ async function fetchCustomersByMeal(mealType, listtype) {
   const extras = await fetchTodayExtras();
   const customizationChanges = await fetchTodayCustomizationChanges();
   const locationChanges = await fetchTodayLocationChanges();
+  const templateNonVeg = await fetchTodayTemplateNonVeg(mealType);
+  const nonVegSet = new Set(templateNonVeg);
 
   const customizationMap = new Map();
 
@@ -575,6 +782,16 @@ async function fetchCustomersByMeal(mealType, listtype) {
         cust.dailyCustomization = true;
       }
 
+      if (nonVegSet.has(cust.id)) {
+        if (mealType === "Lunch") {
+          cust.LunchSpecialNormal = "Chicken";
+        } else {
+          cust.DinnerSpecialNormal = "Chicken";
+        }
+
+        cust.templateNonVeg = true;
+      }
+
       // console.log({
       //   name: cust.name,
       //   id: cust.id,
@@ -609,6 +826,15 @@ async function fetchCustomersByMeal(mealType, listtype) {
       const page = pageById.get(mainId);
       const cust = extractCustomerFromPage(page, mealType);
       cust.route = "Unassigned";
+      if (nonVegSet.has(cust.id)) {
+        if (mealType === "Lunch") {
+          cust.LunchSpecialNormal = "Chicken";
+        } else {
+          cust.DinnerSpecialNormal = "Chicken";
+        }
+
+        cust.templateNonVeg = true;
+      }
       customers.push(cust);
       console.log(
         `✅ Adding Extra (found in main pages): ${cust.name} ${mealType}`,
