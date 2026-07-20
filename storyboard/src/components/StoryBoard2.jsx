@@ -24,6 +24,7 @@ function App({ isPublish, isFetchAllCustomers }) {
   const [fetching, setFetching] = useState(false);
   const [isNonVegView, setIsNonVegView] = useState(false);
   const [data, setData] = useState([]);
+  const [isFullRiceMeal, setIsFullRiceMeal] = useState(false);
 
   const THALI_TYPE_SUPPORTED = isNonVegView
     ? [
@@ -316,6 +317,20 @@ Skipped Inactive: ${result.extras.skippedInactive}
     );
   };
 
+  function getDisplayedCustomization(customization, isFullRiceMeal) {
+    if (!customization) return "";
+
+    if (!isFullRiceMeal) return customization;
+
+    const keep = ["3 Gravy", "No Curd", "No Raita", "Spoon", "Tissue"];
+
+    return keep
+      .filter((item) =>
+        customization.toLowerCase().includes(item.toLowerCase()),
+      )
+      .join(", ");
+  }
+
   const handleSave = (customerInstanceId) => {
     const updatedCustomers = customers.map((c) =>
       c.instanceId === customerInstanceId
@@ -369,8 +384,12 @@ Skipped Inactive: ${result.extras.skippedInactive}
 
     // STEP 1: Assign thali types
     updatedCustomers.forEach((customer) => {
-      const hasCustomization =
-        customer.customisation && customer.customisation.trim().length > 0;
+      const effectiveCustomization = getDisplayedCustomization(
+        customer.customisation,
+        isFullRiceMeal,
+      );
+
+      const hasCustomization = effectiveCustomization.trim().length > 0;
 
       if (customer.thaliType === "Unassigned") {
         if (!isFetchAllCustomers && customer.isTrialMeal) {
@@ -384,6 +403,8 @@ Skipped Inactive: ${result.extras.skippedInactive}
         }
       } else if (customer.thaliType === "Normal" && hasCustomization) {
         customer.thaliType = "Special";
+      } else if (customer.thaliType === "Special" && !hasCustomization) {
+        customer.thaliType = "Normal";
       }
     });
 
@@ -391,8 +412,12 @@ Skipped Inactive: ${result.extras.skippedInactive}
     const sortByCustomizationPriority = (list) =>
       list.sort((a, b) => {
         const diff =
-          getSpecialPriority(a.customisation) -
-          getSpecialPriority(b.customisation);
+          getSpecialPriority(
+            getDisplayedCustomization(a.customisation, isFullRiceMeal),
+          ) -
+          getSpecialPriority(
+            getDisplayedCustomization(b.customisation, isFullRiceMeal),
+          );
 
         if (diff !== 0) return diff;
 
@@ -432,8 +457,13 @@ Skipped Inactive: ${result.extras.skippedInactive}
       thaliCustomers.forEach((c, index) => {
         text += `${index + 1}. ${c.name}`;
 
-        if (c.customisation) {
-          text += ` - ${c.customisation}`;
+        const displayCustomization = getDisplayedCustomization(
+          c.customisation,
+          isFullRiceMeal,
+        );
+
+        if (displayCustomization) {
+          text += ` - ${displayCustomization}`;
         }
 
         if (c.poster) {
@@ -511,6 +541,45 @@ Skipped Inactive: ${result.extras.skippedInactive}
                   position: "absolute",
                   top: 3,
                   left: isNonVegView ? 26 : 3,
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: "#fff",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                  transition: "left 0.2s ease",
+                }}
+              />
+            </div>
+          </label>
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              cursor: "pointer",
+            }}
+            onClick={() => setIsFullRiceMeal((v) => !v)}
+          >
+            <span>Full Rice Meal</span>
+
+            <div
+              role="switch"
+              aria-checked={isFullRiceMeal}
+              style={{
+                width: 52,
+                height: 28,
+                borderRadius: 999,
+                background: isFullRiceMeal ? "#2196F3" : "#cfd8dc",
+                position: "relative",
+                transition: "background 0.2s ease",
+                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.05)",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 3,
+                  left: isFullRiceMeal ? 26 : 3,
                   width: 22,
                   height: 22,
                   borderRadius: "50%",
@@ -674,8 +743,14 @@ Skipped Inactive: ${result.extras.skippedInactive}
                                   <h4>
                                     {customer.name}{" "}
                                     <span>
-                                      {customer.customisation
-                                        ? `- ${customer.customisation}`
+                                      {getDisplayedCustomization(
+                                        customer.customisation,
+                                        isFullRiceMeal,
+                                      )
+                                        ? `- ${getDisplayedCustomization(
+                                            customer.customisation,
+                                            isFullRiceMeal,
+                                          )}`
                                         : " "}
                                     </span>
                                     <span>
@@ -716,7 +791,15 @@ Skipped Inactive: ${result.extras.skippedInactive}
                           .map((c, i) => (
                             <li key={c.id}>
                               {c.name}{" "}
-                              {c.customisation ? `- ${c.customisation}` : ""}
+                              {getDisplayedCustomization(
+                                c.customisation,
+                                isFullRiceMeal,
+                              )
+                                ? `- ${getDisplayedCustomization(
+                                    c.customisation,
+                                    isFullRiceMeal,
+                                  )}`
+                                : ""}
                               {c.poster ? `- Poster` : ""}
                             </li>
                           ))}
