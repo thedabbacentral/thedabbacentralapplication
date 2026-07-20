@@ -344,8 +344,7 @@ async function applyTemplateExtraMeals(mealType) {
       (m) => m.name,
     );
 
-    const active =
-      startDate <= today && endDate >= today && mealTypes.includes(mealType);
+    const active = startDate <= today && endDate >= today;
 
     if (!active) {
       skippedInactive++;
