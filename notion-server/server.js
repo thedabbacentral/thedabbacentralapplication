@@ -27,6 +27,12 @@ const dailyCustomizationDbId = process.env.NOTION_DAILY_CUSTOMIZATION_DB_ID;
 const locationChangeDbId = process.env.LOCATION_CHANGE_DB_ID;
 const templateDbId = process.env.TEMPLATE_DB_ID;
 
+function getTodayIST() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+}
+
 async function fetchTodayFixedCancellations(mealType) {
   console.log("🔥 fetchTodayFixedCancellations called");
 
@@ -513,7 +519,7 @@ async function fetchTodayCancellations() {
   if (!dataSourceId)
     throw new Error("No data source found for cancellation DB");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayIST();
   const cancelled = new Set();
 
   let cursor = undefined;
@@ -551,7 +557,7 @@ async function fetchTodayExtras() {
   const dataSourceId = await getPrimaryDataSourceId(extrasDbId);
   if (!dataSourceId) throw new Error("No data source found for extras DB");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayIST();
   const extras = [];
 
   let cursor = undefined;
@@ -696,7 +702,7 @@ async function fetchCustomersByMeal(mealType, listtype) {
   const dataSourceId = await getPrimaryDataSourceId(databaseId);
   if (!dataSourceId) throw new Error("No data source found for main DB");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayIST();
   const allPages = [];
   let cursor = undefined;
 
@@ -889,7 +895,7 @@ async function fetchAllCustomersByMeal(mealType, listtype) {
   const dataSourceId = await getPrimaryDataSourceId(databaseId);
   if (!dataSourceId) throw new Error("No data source found for main DB");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayIST();
   const allPages = [];
   let cursor = undefined;
 
