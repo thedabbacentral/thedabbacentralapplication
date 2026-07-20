@@ -104,6 +104,12 @@ Skipped Inactive: ${result.extras.skippedInactive}
     setCustomers(parseCustomers(data));
   }, [data, isNonVegView]);
 
+  useEffect(() => {
+    if (isFetchAllCustomers && isNonVegView) {
+      setIsNonVegView(false);
+    }
+  }, [isFetchAllCustomers]);
+
   const parseCustomers = (customerData) => {
     if (isNonVegView) {
       customerData = customerData
@@ -126,17 +132,19 @@ Skipped Inactive: ${result.extras.skippedInactive}
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
                 dailyCustomization: customer.dailyCustomization || false,
+                isTrialMeal: customer.isTrialMeal || false,
+                templateNonVeg: customer.templateNonVeg || false,
               }
             : {
                 thaliType: customer.locationChanged
                   ? "Unassigned"
                   : customer.foodPreference === "Non-Veg"
                     ? "Chicken"
-                    : customer.LunchSpecialNormal === "Paneer"
+                    : customer.DinnerSpecialNormal === "Paneer"
                       ? "Normal"
-                      : customer.LunchSpecialNormal === "Normal" ||
-                          customer.lunchServeOrder
-                        ? (customer.LunchSpecialNormal ?? "Unassigned")
+                      : customer.DinnerSpecialNormal === "Normal" ||
+                          customer.dinnerServeOrder
+                        ? (customer.DinnerSpecialNormal ?? "Unassigned")
                         : "Unassigned",
                 serveOrder: customer.dinnerServeOrder ?? 0,
                 customisation: customer.customisationDinner ?? "",
@@ -145,6 +153,8 @@ Skipped Inactive: ${result.extras.skippedInactive}
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
                 dailyCustomization: customer.dailyCustomization || false,
+                isTrialMeal: customer.isTrialMeal || false,
+                templateNonVeg: customer.templateNonVeg || false,
               },
         )
         ?.sort((a, b) => a.serveOrder - b.serveOrder);
@@ -165,6 +175,8 @@ Skipped Inactive: ${result.extras.skippedInactive}
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
                 dailyCustomization: customer.dailyCustomization || false,
+                isTrialMeal: customer.isTrialMeal || false,
+                templateNonVeg: customer.templateNonVeg || false,
               }
             : {
                 thaliType:
@@ -179,10 +191,13 @@ Skipped Inactive: ${result.extras.skippedInactive}
                 name: customer.name,
                 instanceId: `${customer.id}-${index}`,
                 dailyCustomization: customer.dailyCustomization || false,
+                isTrialMeal: customer.isTrialMeal || false,
+                templateNonVeg: customer.templateNonVeg || false,
               },
         )
         ?.sort((a, b) => a.serveOrder - b.serveOrder);
     }
+
     return customerData;
   };
 
@@ -316,6 +331,92 @@ Skipped Inactive: ${result.extras.skippedInactive}
     setEditedThaliSpecial("");
   };
 
+  function normalize(customisation = "") {
+    return customisation
+      .toLowerCase()
+      .replace(/poster/g, "")
+      .replace(/spoon/g, "")
+      .replace(/papad/g, "")
+      .replace(/salad/g, "")
+      .replace(/achar/g, "")
+      .trim();
+  }
+
+  function getSpecialPriority(customisation = "") {
+    const text = normalize(customisation);
+
+    if (text.includes("no rice")) {
+      if (text.includes("2 gravy")) return 2;
+      return 1;
+    }
+
+    if (text.includes("2 gravy")) return 3;
+
+    if (text.includes("only rice")) return 4;
+
+    if (text.includes("less rice")) return 5;
+
+    if (text.includes("no roti")) return 6;
+
+    if (text.includes("roti")) return 7;
+
+    return text ? 8 : 9;
+  }
+
+  const prepareServingList = () => {
+    // Clone customers
+    const updatedCustomers = customers.map((c) => ({ ...c }));
+
+    // STEP 1: Assign thali types
+    updatedCustomers.forEach((customer) => {
+      const hasCustomization =
+        customer.customisation && customer.customisation.trim().length > 0;
+
+      if (customer.thaliType === "Unassigned") {
+        if (!isFetchAllCustomers && customer.isTrialMeal) {
+          customer.thaliType = "Paneer";
+        } else if (!isFetchAllCustomers && customer.templateNonVeg) {
+          customer.thaliType = "Chicken";
+        } else if (hasCustomization) {
+          customer.thaliType = "Special";
+        } else {
+          customer.thaliType = "Normal";
+        }
+      } else if (customer.thaliType === "Normal" && hasCustomization) {
+        customer.thaliType = "Special";
+      }
+    });
+
+    // Helper for sorting by customization priority
+    const sortByCustomizationPriority = (list) =>
+      list.sort((a, b) => {
+        const diff =
+          getSpecialPriority(a.customisation) -
+          getSpecialPriority(b.customisation);
+
+        if (diff !== 0) return diff;
+
+        return 0;
+      });
+
+    // STEP 2: Sort Special customers
+    const specialCustomers = sortByCustomizationPriority(
+      updatedCustomers.filter((c) => c.thaliType === "Special"),
+    );
+
+    // STEP 3: Sort Chicken customers
+    const chickenCustomers = sortByCustomizationPriority(
+      updatedCustomers.filter((c) => c.thaliType === "Chicken"),
+    );
+
+    // STEP 4: Everything else stays in existing order
+    const otherCustomers = updatedCustomers.filter(
+      (c) => c.thaliType !== "Special" && c.thaliType !== "Chicken",
+    );
+
+    setCustomers([...specialCustomers, ...chickenCustomers, ...otherCustomers]);
+  };
+
   if (error) return <p className="error">{error}</p>;
 
   const generateServingListText = () => {
@@ -383,9 +484,13 @@ Skipped Inactive: ${result.extras.skippedInactive}
               display: "inline-flex",
               alignItems: "center",
               gap: "8px",
-              cursor: "pointer",
+              cursor: isFetchAllCustomers ? "not-allowed" : "pointer",
+              opacity: isFetchAllCustomers ? 0.5 : 1,
             }}
-            onClick={() => setIsNonVegView((v) => !v)}
+            onClick={() => {
+              if (isFetchAllCustomers) return;
+              setIsNonVegView((v) => !v);
+            }}
           >
             <span>Non Veg View</span>
             <div
@@ -419,7 +524,7 @@ Skipped Inactive: ${result.extras.skippedInactive}
           <button
             className="btn generate-btn"
             onClick={() => setShowModal(true)}
-            disabled={fetching}
+            disabled={fetching || isFetchAllCustomers}
             style={{
               ...buttonStyle,
               background: "#4CAF50",
@@ -480,7 +585,23 @@ Skipped Inactive: ${result.extras.skippedInactive}
           >
             Publish Route
           </button>
-          <button className="fixed-cancellations-btn" onClick={applyTemplates}>
+
+          <button
+            style={{
+              ...buttonStyle,
+              background: "#9C27B0",
+              color: "white",
+            }}
+            onClick={prepareServingList}
+            disabled={fetching}
+          >
+            ✨ Organize List
+          </button>
+          <button
+            className="fixed-cancellations-btn"
+            onClick={applyTemplates}
+            disabled={fetching || isFetchAllCustomers}
+          >
             🚫 Apply Templates
           </button>
         </div>

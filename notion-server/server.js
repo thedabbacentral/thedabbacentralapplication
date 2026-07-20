@@ -591,7 +591,9 @@ async function fetchTodayCustomizationChanges() {
     throw new Error("No data source found for Daily Customization DB");
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
 
   const changes = [];
 
@@ -764,8 +766,14 @@ async function fetchCustomersByMeal(mealType, listtype) {
       const props = p.properties || {};
       const trialDate = props["Trial Date"]?.date?.start;
       const trialTime = props["Trial Meal Time"]?.select?.name;
-      if (trialDate === today && trialTime === mealType) {
+
+      const isTrialMeal = trialDate === today && trialTime === mealType;
+
+      cust.isTrialMeal = isTrialMeal;
+
+      if (isTrialMeal) {
         if (mealType === "Lunch") cust.LunchSpecialNormal = "Paneer";
+
         if (mealType === "Dinner") cust.DinnerSpecialNormal = "Paneer";
       }
 
