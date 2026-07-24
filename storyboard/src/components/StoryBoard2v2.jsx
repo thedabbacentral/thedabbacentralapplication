@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import "./StoryBoard2.css";
-const API_URL = "http://localhost:4000";
-// const API_URL = "https://thedabbacentralapplication.onrender.com";
+import "./StoryBoard2v2.css";
+// const API_URL = "http://localhost:4000";
+const API_URL = "https://thedabbacentralapplication.onrender.com";
 
 const buttonStyle = {
   padding: "8px 16px",
@@ -119,26 +119,15 @@ Skipped Inactive: ${result.extras.skippedInactive}
             ? {
                 thaliType:
                   customer.foodPreference === "Non-Veg"
-                    ? ["Tiffin", "3CP"].includes(customer.LunchSpecialNormal)
-                      ? customer.LunchSpecialNormal
-                      : "Chicken"
+                    ? "Chicken"
                     : customer.LunchSpecialNormal === "Paneer"
                       ? "Normal"
                       : customer.LunchSpecialNormal === "Normal" ||
                           customer.lunchServeOrder
                         ? (customer.LunchSpecialNormal ?? "Unassigned")
                         : "Unassigned",
-
                 serveOrder: customer.lunchServeOrder ?? 0,
-
-                customisation:
-                  customer.foodPreference === "Non-Veg" &&
-                  ["Tiffin", "3CP"].includes(customer.LunchSpecialNormal)
-                    ? customer.customisationLunch
-                      ? `${customer.customisationLunch}, Chicken`
-                      : "Chicken"
-                    : (customer.customisationLunch ?? ""),
-
+                customisation: customer.customisationLunch ?? "",
                 poster: customer.poster,
                 id: customer.id,
                 name: customer.name,
@@ -151,26 +140,15 @@ Skipped Inactive: ${result.extras.skippedInactive}
                 thaliType: customer.locationChanged
                   ? "Unassigned"
                   : customer.foodPreference === "Non-Veg"
-                    ? ["Tiffin", "3CP"].includes(customer.DinnerSpecialNormal)
-                      ? customer.DinnerSpecialNormal
-                      : "Chicken"
+                    ? "Chicken"
                     : customer.DinnerSpecialNormal === "Paneer"
                       ? "Normal"
                       : customer.DinnerSpecialNormal === "Normal" ||
                           customer.dinnerServeOrder
                         ? (customer.DinnerSpecialNormal ?? "Unassigned")
                         : "Unassigned",
-
                 serveOrder: customer.dinnerServeOrder ?? 0,
-
-                customisation:
-                  customer.foodPreference === "Non-Veg" &&
-                  ["Tiffin", "3CP"].includes(customer.DinnerSpecialNormal)
-                    ? customer.customisationDinner
-                      ? `${customer.customisationDinner}, Chicken`
-                      : "Chicken"
-                    : (customer.customisationDinner ?? ""),
-
+                customisation: customer.customisationDinner ?? "",
                 poster: customer.poster,
                 id: customer.id,
                 name: customer.name,
@@ -191,7 +169,6 @@ Skipped Inactive: ${result.extras.skippedInactive}
                   customer.lunchServeOrder
                     ? (customer.LunchSpecialNormal ?? "Unassigned")
                     : "Unassigned",
-
                 serveOrder: customer.lunchServeOrder ?? 0,
                 customisation: customer.customisationLunch ?? "",
                 poster: customer.poster,
@@ -208,7 +185,6 @@ Skipped Inactive: ${result.extras.skippedInactive}
                   customer.dinnerServeOrder
                     ? (customer.DinnerSpecialNormal ?? "Unassigned")
                     : "Unassigned",
-
                 serveOrder: customer.dinnerServeOrder ?? 0,
                 customisation: customer.customisationDinner ?? "",
                 poster: customer.poster,
@@ -341,17 +317,8 @@ Skipped Inactive: ${result.extras.skippedInactive}
     );
   };
 
-  function getDisplayedCustomization(
-    customization,
-    isFullRiceMeal,
-    isDailyCustomization = false,
-  ) {
+  function getDisplayedCustomization(customization, isFullRiceMeal) {
     if (!customization) return "";
-
-    // Never hide a daily customization
-    if (isDailyCustomization) {
-      return customization;
-    }
 
     if (!isFullRiceMeal) return customization;
 
@@ -420,7 +387,6 @@ Skipped Inactive: ${result.extras.skippedInactive}
       const effectiveCustomization = getDisplayedCustomization(
         customer.customisation,
         isFullRiceMeal,
-        customer.dailyCustomization,
       );
 
       const hasCustomization = effectiveCustomization.trim().length > 0;
@@ -447,18 +413,10 @@ Skipped Inactive: ${result.extras.skippedInactive}
       list.sort((a, b) => {
         const diff =
           getSpecialPriority(
-            getDisplayedCustomization(
-              a.customisation,
-              isFullRiceMeal,
-              a.dailyCustomization,
-            ),
+            getDisplayedCustomization(a.customisation, isFullRiceMeal),
           ) -
           getSpecialPriority(
-            getDisplayedCustomization(
-              b.customisation,
-              isFullRiceMeal,
-              b.dailyCustomization,
-            ),
+            getDisplayedCustomization(b.customisation, isFullRiceMeal),
           );
 
         if (diff !== 0) return diff;
@@ -502,7 +460,6 @@ Skipped Inactive: ${result.extras.skippedInactive}
         const displayCustomization = getDisplayedCustomization(
           c.customisation,
           isFullRiceMeal,
-          c.dailyCustomization,
         );
 
         if (displayCustomization) {
@@ -789,12 +746,10 @@ Skipped Inactive: ${result.extras.skippedInactive}
                                       {getDisplayedCustomization(
                                         customer.customisation,
                                         isFullRiceMeal,
-                                        customer.dailyCustomization,
                                       )
                                         ? `- ${getDisplayedCustomization(
                                             customer.customisation,
                                             isFullRiceMeal,
-                                            customer.dailyCustomization,
                                           )}`
                                         : " "}
                                     </span>
@@ -839,12 +794,10 @@ Skipped Inactive: ${result.extras.skippedInactive}
                               {getDisplayedCustomization(
                                 c.customisation,
                                 isFullRiceMeal,
-                                c.dailyCustomization,
                               )
                                 ? `- ${getDisplayedCustomization(
                                     c.customisation,
                                     isFullRiceMeal,
-                                    c.dailyCustomization,
                                   )}`
                                 : ""}
                               {c.poster ? `- Poster` : ""}

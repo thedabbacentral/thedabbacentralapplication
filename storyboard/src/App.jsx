@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import StoryBoard from "./components/StoryBoard";
 import StoryBoard2 from "./components/StoryBoard2";
+import StoryBoard2v2 from "./components/StoryBoard2v2";
 import "./App.css";
 
 import { useState } from "react";
@@ -125,6 +126,7 @@ function App() {
               />
             }
           />
+          <Route path="/serving-v2" element={<StoryBoard2v2 />} />
           <Route
             path="/delivery"
             element={

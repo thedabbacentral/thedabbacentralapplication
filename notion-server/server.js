@@ -838,7 +838,23 @@ async function fetchCustomersByMeal(mealType, listtype) {
     if (pageById.has(mainId)) {
       const page = pageById.get(mainId);
       const cust = extractCustomerFromPage(page, mealType);
+
       cust.route = "Unassigned";
+
+      // Apply Daily Customization
+      const dailyCustomization = customizationMap.get(`${cust.id}-${mealType}`);
+
+      if (dailyCustomization) {
+        if (mealType === "Lunch") {
+          cust.customisationLunch = dailyCustomization;
+        } else {
+          cust.customisationDinner = dailyCustomization;
+        }
+
+        cust.dailyCustomization = true;
+      }
+
+      // Apply Scheduled Non-Veg
       if (nonVegSet.has(cust.id)) {
         if (mealType === "Lunch") {
           cust.LunchSpecialNormal = "Chicken";
@@ -848,7 +864,17 @@ async function fetchCustomersByMeal(mealType, listtype) {
 
         cust.templateNonVeg = true;
       }
+
+      // Apply Location Change
+      const changedLocation = locationMap.get(`${cust.id}-${mealType}`);
+
+      if (changedLocation) {
+        cust.locationChanged = true;
+        cust.changedMapLink = changedLocation;
+      }
+
       customers.push(cust);
+
       console.log(
         `✅ Adding Extra (found in main pages): ${cust.name} ${mealType}`,
       );
@@ -857,7 +883,43 @@ async function fetchCustomersByMeal(mealType, listtype) {
       try {
         const page = await notion.pages.retrieve({ page_id: mainId });
         const cust = extractCustomerFromPage(page, mealType);
+
         cust.route = "Unassigned";
+
+        // Apply Daily Customization
+        const dailyCustomization = customizationMap.get(
+          `${cust.id}-${mealType}`,
+        );
+
+        if (dailyCustomization) {
+          if (mealType === "Lunch") {
+            cust.customisationLunch = dailyCustomization;
+          } else {
+            cust.customisationDinner = dailyCustomization;
+          }
+
+          cust.dailyCustomization = true;
+        }
+
+        // Apply Scheduled Non-Veg
+        if (nonVegSet.has(cust.id)) {
+          if (mealType === "Lunch") {
+            cust.LunchSpecialNormal = "Chicken";
+          } else {
+            cust.DinnerSpecialNormal = "Chicken";
+          }
+
+          cust.templateNonVeg = true;
+        }
+
+        // Apply Location Change
+        const changedLocation = locationMap.get(`${cust.id}-${mealType}`);
+
+        if (changedLocation) {
+          cust.locationChanged = true;
+          cust.changedMapLink = changedLocation;
+        }
+
         customers.push(cust);
         console.log(
           `✅ Adding Extra (via pages.retrieve): ${cust.name} ${mealType}`,
