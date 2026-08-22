@@ -550,8 +550,9 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
     "Special",
     "Chicken",
     "Paneer",
-    "3 CP",
+    "3CP",
     "Tiffin",
+    "Jumbo Thali",
   ];
 
   const generateList = () => {
@@ -678,7 +679,8 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
       Special: 0,
       Chicken: 0,
       Paneer: 0,
-      "3 CP": 0,
+      "3CP": 0,
+      "Jumbo Thali": 0,
       Tiffin: 0,
     };
 
