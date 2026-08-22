@@ -34,6 +34,7 @@ function App({ isPublish, isFetchAllCustomers }) {
         "Normal",
         "Tiffin",
         "3CP",
+
         "Container",
       ]
     : [
@@ -44,6 +45,7 @@ function App({ isPublish, isFetchAllCustomers }) {
         "Normal",
         "Tiffin",
         "3CP",
+        "Jumbo Thali",
         "Container",
       ];
   const fetchCustomers = async () => {
