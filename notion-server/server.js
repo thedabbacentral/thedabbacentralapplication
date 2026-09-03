@@ -10,7 +10,9 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
+      "http://localhost:5174",
       "https://thedabbacentralapplication.vercel.app",
+      "https://thedabbacentralapplication.onrender.com",
       "https://thedabbacentralapplication-nx9b.vercel.app",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
