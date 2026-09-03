@@ -1245,6 +1245,37 @@ async function fetchAllCustomersByMeal(mealType, listtype) {
   const customers = allPages.map((p) => {
     const cust = extractCustomerFromPage(p, mealType);
 
+    const locationChanges = await fetchTodayLocationChanges();
+
+const locationMap = new Map();
+
+locationChanges.forEach((change) => {
+  locationMap.set(`${change.customerId}-${change.meal}`, change);
+});
+
+const customers = allPages.map((p) => {
+  const cust = extractCustomerFromPage(p, mealType);
+
+  const changedLocation = locationMap.get(
+    `${cust.id}-${mealType}`
+  );
+
+  if (changedLocation) {
+    // Temporary location for today
+    cust.locationChanged = true;
+    cust.changedMapLink = changedLocation.mapLink;
+
+    cust.lat = changedLocation.lat;
+    cust.lng = changedLocation.lng;
+
+    console.log("📍 /all using changed location:", {
+      customer: cust.name,
+      mealType,
+      lat: cust.lat,
+      lng: cust.lng,
+    });
+  } else {
+    // Normal location
     if (mealType === "Lunch") {
       cust.lat = cust.lunchLat;
       cust.lng = cust.lunchLng;
@@ -1252,8 +1283,10 @@ async function fetchAllCustomersByMeal(mealType, listtype) {
       cust.lat = cust.dinnerLat;
       cust.lng = cust.dinnerLng;
     }
+  }
 
-    return cust;
+  return cust;
+});
   });
   if (listtype === "serve") {
     return customers;
