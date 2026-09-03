@@ -29,6 +29,89 @@ const dailyCustomizationDbId = process.env.NOTION_DAILY_CUSTOMIZATION_DB_ID;
 const locationChangeDbId = process.env.LOCATION_CHANGE_DB_ID;
 const templateDbId = process.env.TEMPLATE_DB_ID;
 
+// --------------------------------------------------
+// GOOGLE MAPS LINK → COORDINATES
+// --------------------------------------------------
+
+async function resolveGoogleMapsLink(mapLink) {
+  if (!mapLink) return null;
+
+  try {
+    const response = await fetch(mapLink, {
+      redirect: "follow",
+    });
+
+    const finalUrl = response.url;
+    const html = await response.text();
+
+    console.log("Original Map Link:", mapLink);
+    console.log("Resolved URL:", finalUrl);
+
+    // -----------------------------------------
+    // 1. Coordinates in normal Google URL
+    // -----------------------------------------
+
+    // 1. FIRST: try actual place coordinates
+    // Google Maps commonly stores them as !3dLAT!4dLNG
+
+    let match = finalUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+
+    if (match) {
+      console.log("✅ Actual place coordinates found in URL");
+
+      return {
+        lat: Number(match[1]),
+        lng: Number(match[2]),
+      };
+    }
+
+    // 2. Try coordinates encoded in the HTML
+
+    match = html.match(/%212d(-?\d+\.\d+)%213d(-?\d+\.\d+)/);
+
+    if (match) {
+      console.log("✅ Coordinates found in Google HTML");
+
+      return {
+        lat: Number(match[2]),
+        lng: Number(match[1]),
+      };
+    }
+
+    match = html.match(/%213d(-?\d+\.\d+)%214d(-?\d+\.\d+)/);
+
+    if (match) {
+      console.log("✅ Coordinates found in Google HTML");
+
+      return {
+        lat: Number(match[1]),
+        lng: Number(match[2]),
+      };
+    }
+
+    // 3. LAST RESORT: use @lat,lng
+    // This may be the map viewport rather than the exact place.
+
+    match = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+
+    if (match) {
+      console.log("⚠️ Using map viewport coordinates");
+
+      return {
+        lat: Number(match[1]),
+        lng: Number(match[2]),
+      };
+    }
+
+    console.log("⚠️ Could not extract coordinates");
+
+    return null;
+  } catch (err) {
+    console.error("❌ Failed to resolve Google Maps link:", err.message);
+    return null;
+  }
+}
+
 function getTodayIST() {
   return new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Kolkata",
@@ -490,9 +573,16 @@ function extractCustomerFromPage(page, mealType) {
       props["End Date"]?.date?.end ?? props["End Date"]?.date?.start ?? null,
     mealTypes: (props["Meal Type"]?.multi_select || []).map((m) => m.name),
 
-    // Map links (url property)
+    // Map links
     lunchMapLink: props["Lunch Map Link"]?.url ?? null,
     dinnerMapLink: props["Dinner Map Link"]?.url ?? null,
+
+    // Coordinates
+    lunchLat: props["Lunch Lat"]?.number ?? null,
+    lunchLng: props["Lunch Long"]?.number ?? null,
+
+    dinnerLat: props["Dinner Lat"]?.number ?? null,
+    dinnerLng: props["Dinner Long"]?.number ?? null,
 
     // phone number property (Notion uses phone_number)
     phoneNumber: props["Phone Number"]?.phone_number ?? null,
@@ -655,6 +745,7 @@ async function fetchTodayCustomizationChanges() {
 
 async function fetchTodayLocationChanges() {
   console.log("🔥 fetchTodayLocationChanges called");
+
   const dataSourceId = await getPrimaryDataSourceId(locationChangeDbId);
 
   const today = new Date().toLocaleDateString("en-CA", {
@@ -677,8 +768,14 @@ async function fetchTodayLocationChanges() {
     const props = page.properties;
 
     const customerId = props["Customer"]?.relation?.[0]?.id;
+
     const meal = props["Meal Type"]?.select?.name;
-    const mapLink = props["Changed Location Link"]?.url || "";
+
+    const mapLink = props["Changed Location Link"]?.url || null;
+
+    const lat = props["Lat"]?.number ?? null;
+
+    const lng = props["Long"]?.number ?? null;
 
     if (!customerId || !meal) continue;
 
@@ -686,6 +783,8 @@ async function fetchTodayLocationChanges() {
       customerId,
       meal,
       mapLink,
+      lat,
+      lng,
     });
   }
 
@@ -701,33 +800,74 @@ async function fetchTodayLocationChanges() {
  */
 async function fetchCustomersByMeal(mealType, listtype) {
   console.log("🚀 fetchCustomersByMeal", mealType, listtype);
+
   const dataSourceId = await getPrimaryDataSourceId(databaseId);
-  if (!dataSourceId) throw new Error("No data source found for main DB");
+
+  if (!dataSourceId) {
+    throw new Error("No data source found for main DB");
+  }
 
   const today = getTodayIST();
+
   const allPages = [];
   let cursor = undefined;
 
-  // Active subscriptions filter
+  // --------------------------------------------------
+  // ACTIVE SUBSCRIPTIONS FILTER
+  // --------------------------------------------------
+
   const baseFilter = {
     and: [
-      { property: "Start Date", date: { on_or_before: today } },
-      { property: "End Date", date: { on_or_after: today } },
-      { property: "Meal Type", multi_select: { contains: mealType } },
+      {
+        property: "Start Date",
+        date: {
+          on_or_before: today,
+        },
+      },
+      {
+        property: "End Date",
+        date: {
+          on_or_after: today,
+        },
+      },
+      {
+        property: "Meal Type",
+        multi_select: {
+          contains: mealType,
+        },
+      },
     ],
   };
 
-  // Trial filter (trial date today + trial meal time equals mealType)
+  // --------------------------------------------------
+  // TRIAL FILTER
+  // --------------------------------------------------
+
   const trialFilter = {
     and: [
-      { property: "Trial Date", date: { equals: today } },
-      { property: "Trial Meal Time", select: { equals: mealType } },
+      {
+        property: "Trial Date",
+        date: {
+          equals: today,
+        },
+      },
+      {
+        property: "Trial Meal Time",
+        select: {
+          equals: mealType,
+        },
+      },
     ],
   };
 
-  const filter = { or: [baseFilter, trialFilter] };
+  const filter = {
+    or: [baseFilter, trialFilter],
+  };
 
-  // Paginate over the main DB data source
+  // --------------------------------------------------
+  // FETCH ALL MAIN DB PAGES
+  // --------------------------------------------------
+
   do {
     const resp = await notion.dataSources.query({
       data_source_id: dataSourceId,
@@ -735,20 +875,37 @@ async function fetchCustomersByMeal(mealType, listtype) {
       start_cursor: cursor,
       filter,
     });
+
     allPages.push(...(resp.results || []));
+
     cursor = resp.next_cursor;
   } while (cursor);
 
-  // Build quick lookup map of main pages by id (used for matching extras)
+  // --------------------------------------------------
+  // LOOKUP MAP
+  // --------------------------------------------------
+
   const pageById = new Map(allPages.map((p) => [p.id, p]));
 
-  // fetch cancellations & extras (these both use their own dataSources)
+  // --------------------------------------------------
+  // FETCH CANCELLATIONS / EXTRAS / CHANGES
+  // --------------------------------------------------
+
   const cancelled = await fetchTodayCancellations();
+
   const extras = await fetchTodayExtras();
+
   const customizationChanges = await fetchTodayCustomizationChanges();
+
   const locationChanges = await fetchTodayLocationChanges();
+
   const templateNonVeg = await fetchTodayTemplateNonVeg(mealType);
+
   const nonVegSet = new Set(templateNonVeg);
+
+  // --------------------------------------------------
+  // CUSTOMIZATION MAP
+  // --------------------------------------------------
 
   const customizationMap = new Map();
 
@@ -759,20 +916,32 @@ async function fetchCustomersByMeal(mealType, listtype) {
     );
   });
 
+  // --------------------------------------------------
+  // LOCATION CHANGE MAP
+  // --------------------------------------------------
+
   const locationMap = new Map();
 
   locationChanges.forEach((change) => {
-    locationMap.set(`${change.customerId}-${change.meal}`, change.mapLink);
+    locationMap.set(`${change.customerId}-${change.meal}`, change);
   });
 
-  // Map allPages => customers (apply trial override)
-  const customers = allPages
-    .map((p) => {
+  // ==================================================
+  // MAIN CUSTOMERS
+  // ==================================================
+
+  const customerResults = await Promise.all(
+    allPages.map(async (p) => {
       const cust = extractCustomerFromPage(p, mealType);
 
-      // trial override: if trial is today for this meal, set special -> Paneer
+      // ------------------------------------------------
+      // TRIAL OVERRIDE
+      // ------------------------------------------------
+
       const props = p.properties || {};
+
       const trialDate = props["Trial Date"]?.date?.start;
+
       const trialTime = props["Trial Meal Time"]?.select?.name;
 
       const isTrialMeal = trialDate === today && trialTime === mealType;
@@ -780,10 +949,18 @@ async function fetchCustomersByMeal(mealType, listtype) {
       cust.isTrialMeal = isTrialMeal;
 
       if (isTrialMeal) {
-        if (mealType === "Lunch") cust.LunchSpecialNormal = "Paneer";
+        if (mealType === "Lunch") {
+          cust.LunchSpecialNormal = "Paneer";
+        }
 
-        if (mealType === "Dinner") cust.DinnerSpecialNormal = "Paneer";
+        if (mealType === "Dinner") {
+          cust.DinnerSpecialNormal = "Paneer";
+        }
       }
+
+      // ------------------------------------------------
+      // DAILY CUSTOMIZATION
+      // ------------------------------------------------
 
       const dailyCustomization = customizationMap.get(`${cust.id}-${mealType}`);
 
@@ -797,6 +974,10 @@ async function fetchCustomersByMeal(mealType, listtype) {
         cust.dailyCustomization = true;
       }
 
+      // ------------------------------------------------
+      // SCHEDULED NON-VEG
+      // ------------------------------------------------
+
       if (nonVegSet.has(cust.id)) {
         if (mealType === "Lunch") {
           cust.LunchSpecialNormal = "Chicken";
@@ -807,13 +988,12 @@ async function fetchCustomersByMeal(mealType, listtype) {
         cust.templateNonVeg = true;
       }
 
-      // console.log({
-      //   name: cust.name,
-      //   id: cust.id,
-      //   lunch: cust.customisationLunch,
-      //   dinner: cust.customisationDinner,
-      //   daily: cust.dailyCustomization,
-      // });
+      // ------------------------------------------------
+      // LOCATION CHANGE
+      // ------------------------------------------------
+      // ------------------------------------------------
+      // LOCATION CHANGE
+      // ------------------------------------------------
 
       const changedLocation = locationMap.get(`${cust.id}-${mealType}`);
 
@@ -824,133 +1004,207 @@ async function fetchCustomersByMeal(mealType, listtype) {
       });
 
       if (changedLocation) {
-        cust.locationChanged = true;
-        cust.changedMapLink = changedLocation;
-      }
+        // Customer has a temporary location change today
 
+        cust.locationChanged = true;
+
+        cust.changedMapLink = changedLocation.mapLink;
+
+        cust.lat = changedLocation.lat;
+        cust.lng = changedLocation.lng;
+
+        console.log("📍 Using changed location:", {
+          customer: cust.name,
+          mealType,
+          lat: cust.lat,
+          lng: cust.lng,
+        });
+      } else {
+        // Customer is using their normal location
+
+        if (mealType === "Lunch") {
+          cust.lat = cust.lunchLat;
+          cust.lng = cust.lunchLng;
+        } else {
+          cust.lat = cust.dinnerLat;
+          cust.lng = cust.dinnerLng;
+        }
+
+        console.log("📍 Using normal location:", {
+          customer: cust.name,
+          mealType,
+          lat: cust.lat,
+          lng: cust.lng,
+        });
+      }
       return cust;
-    })
-    .filter((c) => !cancelled.has(`${c.id}-${mealType}`));
+    }),
+  );
 
-  // For extras: some entries reference main DB page ids that might already be in allPages.
-  // If we find the main page in pageById, use that. Otherwise, attempt pages.retrieve as fallback.
+  // --------------------------------------------------
+  // REMOVE CANCELLED CUSTOMERS
+  // --------------------------------------------------
+
+  const customers = customerResults.filter(
+    (c) => !cancelled.has(`${c.id}-${mealType}`),
+  );
+
+  // ==================================================
+  // EXTRA MEALS
+  // ==================================================
+
   for (const ex of extras) {
-    if (ex.mealType !== mealType) continue;
+    if (ex.mealType !== mealType) {
+      continue;
+    }
+
     const mainId = ex.id;
+
+    // ------------------------------------------------
+    // GET CUSTOMER PAGE
+    // ------------------------------------------------
+
+    let page;
+
     if (pageById.has(mainId)) {
-      const page = pageById.get(mainId);
-      const cust = extractCustomerFromPage(page, mealType);
-
-      cust.route = "Unassigned";
-
-      // Apply Daily Customization
-      const dailyCustomization = customizationMap.get(`${cust.id}-${mealType}`);
-
-      if (dailyCustomization) {
-        if (mealType === "Lunch") {
-          cust.customisationLunch = dailyCustomization;
-        } else {
-          cust.customisationDinner = dailyCustomization;
-        }
-
-        cust.dailyCustomization = true;
-      }
-
-      // Apply Scheduled Non-Veg
-      if (nonVegSet.has(cust.id)) {
-        if (mealType === "Lunch") {
-          cust.LunchSpecialNormal = "Chicken";
-        } else {
-          cust.DinnerSpecialNormal = "Chicken";
-        }
-
-        cust.templateNonVeg = true;
-      }
-
-      // Apply Location Change
-      const changedLocation = locationMap.get(`${cust.id}-${mealType}`);
-
-      if (changedLocation) {
-        cust.locationChanged = true;
-        cust.changedMapLink = changedLocation;
-      }
-
-      customers.push(cust);
-
-      console.log(
-        `✅ Adding Extra (found in main pages): ${cust.name} ${mealType}`,
-      );
+      page = pageById.get(mainId);
     } else {
-      // fallback: try pages.retrieve (may fail if integration lacks permissions)
       try {
-        const page = await notion.pages.retrieve({ page_id: mainId });
-        const cust = extractCustomerFromPage(page, mealType);
-
-        cust.route = "Unassigned";
-
-        // Apply Daily Customization
-        const dailyCustomization = customizationMap.get(
-          `${cust.id}-${mealType}`,
-        );
-
-        if (dailyCustomization) {
-          if (mealType === "Lunch") {
-            cust.customisationLunch = dailyCustomization;
-          } else {
-            cust.customisationDinner = dailyCustomization;
-          }
-
-          cust.dailyCustomization = true;
-        }
-
-        // Apply Scheduled Non-Veg
-        if (nonVegSet.has(cust.id)) {
-          if (mealType === "Lunch") {
-            cust.LunchSpecialNormal = "Chicken";
-          } else {
-            cust.DinnerSpecialNormal = "Chicken";
-          }
-
-          cust.templateNonVeg = true;
-        }
-
-        // Apply Location Change
-        const changedLocation = locationMap.get(`${cust.id}-${mealType}`);
-
-        if (changedLocation) {
-          cust.locationChanged = true;
-          cust.changedMapLink = changedLocation;
-        }
-
-        customers.push(cust);
-        console.log(
-          `✅ Adding Extra (via pages.retrieve): ${cust.name} ${mealType}`,
-        );
+        page = await notion.pages.retrieve({
+          page_id: mainId,
+        });
       } catch (err) {
         console.error(
           "❌ Failed to fetch extra meal customer:",
           mainId,
           err.message,
         );
+
+        continue;
       }
     }
+
+    // ------------------------------------------------
+    // CREATE CUSTOMER
+    // ------------------------------------------------
+
+    const cust = extractCustomerFromPage(page, mealType);
+
+    cust.route = "Unassigned";
+
+    // ------------------------------------------------
+    // DAILY CUSTOMIZATION
+    // ------------------------------------------------
+
+    const dailyCustomization = customizationMap.get(`${cust.id}-${mealType}`);
+
+    if (dailyCustomization) {
+      if (mealType === "Lunch") {
+        cust.customisationLunch = dailyCustomization;
+      } else {
+        cust.customisationDinner = dailyCustomization;
+      }
+
+      cust.dailyCustomization = true;
+    }
+
+    // ------------------------------------------------
+    // SCHEDULED NON-VEG
+    // ------------------------------------------------
+
+    if (nonVegSet.has(cust.id)) {
+      if (mealType === "Lunch") {
+        cust.LunchSpecialNormal = "Chicken";
+      } else {
+        cust.DinnerSpecialNormal = "Chicken";
+      }
+
+      cust.templateNonVeg = true;
+    }
+    // ------------------------------------------------
+    // LOCATION CHANGE / COORDINATES
+    // ------------------------------------------------
+
+    const changedLocation = locationMap.get(`${cust.id}-${mealType}`);
+
+    if (changedLocation) {
+      // Customer has a temporary location change today
+      cust.locationChanged = true;
+
+      cust.changedMapLink = changedLocation.mapLink;
+
+      // IMPORTANT:
+      // Use Lat / Long stored in Location Change database
+      cust.lat = changedLocation.lat;
+      cust.lng = changedLocation.lng;
+
+      console.log("📍 Using changed location for extra:", {
+        customer: cust.name,
+        mealType,
+        lat: cust.lat,
+        lng: cust.lng,
+      });
+    } else {
+      // Use normal coordinates stored in Main Customer database
+
+      if (mealType === "Lunch") {
+        cust.lat = cust.lunchLat;
+        cust.lng = cust.lunchLng;
+      } else {
+        cust.lat = cust.dinnerLat;
+        cust.lng = cust.dinnerLng;
+      }
+
+      console.log("📍 Using normal location for extra:", {
+        customer: cust.name,
+        mealType,
+        lat: cust.lat,
+        lng: cust.lng,
+      });
+    }
+
+    customers.push(cust);
+
+    console.log(`✅ Adding Extra: ${cust.name} ${mealType}`);
   }
+
+  // ==================================================
+  // SERVE LIST
+  // ==================================================
 
   if (listtype === "serve") {
     return customers;
   }
 
-  // Group by route and sort by order
+  // ==================================================
+  // GROUP BY ROUTE
+  // ==================================================
+
   const grouped = customers.reduce((acc, c) => {
     const route = c.route || "Unassigned";
-    if (!acc[route]) acc[route] = [];
+
+    if (!acc[route]) {
+      acc[route] = [];
+    }
+
     acc[route].push(c);
+
     return acc;
   }, {});
+
+  // --------------------------------------------------
+  // SORT BY ORDER
+  // --------------------------------------------------
 
   for (const route in grouped) {
     grouped[route].sort((a, b) => a.order - b.order);
   }
+
+  console.log("========== FINAL CUSTOMER SAMPLE ==========");
+  console.log(customers[0]);
+  console.log("LAT:", customers[0]?.lat);
+  console.log("LNG:", customers[0]?.lng);
+  console.log("===========================================");
 
   return grouped;
 }
@@ -990,6 +1244,15 @@ async function fetchAllCustomersByMeal(mealType, listtype) {
   // Map allPages => customers (apply trial override)
   const customers = allPages.map((p) => {
     const cust = extractCustomerFromPage(p, mealType);
+
+    if (mealType === "Lunch") {
+      cust.lat = cust.lunchLat;
+      cust.lng = cust.lunchLng;
+    } else {
+      cust.lat = cust.dinnerLat;
+      cust.lng = cust.dinnerLng;
+    }
+
     return cust;
   });
   if (listtype === "serve") {
@@ -1192,68 +1455,132 @@ app.post("/customers/route/publish", async (req, res) => {
 
 app.post("/customer/update", async (req, res) => {
   console.log("📌 Received Publish Data:");
+
   const data = req.body;
+
   try {
     const updateData = data?.customer;
     const mealType = data?.mealType;
     const customers = updateData?.customers;
+
+    console.log("🍱 Meal Type:", mealType);
+    console.log("👥 Customers:", customers);
+
     if (!customers?.length) {
       return res.status(400).json({
         error: "Customer not found",
       });
     }
+
     if (!mealType || !["lunch", "dinner"].includes(mealType)) {
       return res.status(400).json({
         error: "Meal type not found",
       });
     }
+
     for (const customer of customers) {
       const pageId = customer.id;
+
       if (!pageId) {
         return res.status(400).json({
           error: "Page id not found",
         });
       }
-      console.log(`Updating page: ${pageId}`);
+
+      // Convert coordinates to numbers
+      const lat =
+        customer.lat === "" ||
+        customer.lat === null ||
+        customer.lat === undefined
+          ? null
+          : Number(customer.lat);
+
+      const lng =
+        customer.lng === "" ||
+        customer.lng === null ||
+        customer.lng === undefined
+          ? null
+          : Number(customer.lng);
+
+      console.log("=================================");
+      console.log("Updating customer:", customer.name);
+      console.log("Page ID:", pageId);
+      console.log("Meal Type:", mealType);
+      console.log("Latitude:", lat);
+      console.log("Longitude:", lng);
+      console.log("=================================");
+
       await notion.pages.update({
         page_id: pageId,
+
         properties: {
+          // SPECIAL
           ...(mealType === "lunch"
             ? {
                 "Lunch Special - Normal": {
                   select: {
-                    name: customer.LunchSpecialNormal,
+                    name: customer.LunchSpecialNormal || "Normal",
                   },
                 },
               }
             : {
                 "Dinner Special - Normal": {
                   select: {
-                    name: customer.DinnerSpecialNormal,
+                    name: customer.DinnerSpecialNormal || "Normal",
                   },
                 },
               }),
+
+          // MAP LINK
           ...(mealType === "lunch"
             ? {
                 "Lunch Map Link": {
-                  url: updateData.mapLink,
+                  url: updateData.mapLink || null,
                 },
               }
             : {
                 "Dinner Map Link": {
-                  url: updateData.mapLink,
+                  url: updateData.mapLink || null,
                 },
               }),
+
+          // COORDINATES
+          ...(mealType === "lunch"
+            ? {
+                "Lunch Lat": {
+                  number: lat,
+                },
+                "Lunch Long": {
+                  number: lng,
+                },
+              }
+            : {
+                "Dinner Lat": {
+                  number: lat,
+                },
+                "Dinner Long": {
+                  number: lng,
+                },
+              }),
+
+          // PHONE
           "Phone Number": {
-            phone_number: customer.phoneNumber,
+            phone_number: customer.phoneNumber || null,
           },
         },
       });
+
+      console.log(`✅ Updated Notion page: ${pageId}`);
     }
 
-    res.json({ success: true, message: "Data received successfully" });
+    res.json({
+      success: true,
+      message: "Data received successfully",
+    });
   } catch (err) {
-    console.error("❌ Error in /customers/publish:", err?.message ?? err);
+    console.error("❌ Error in /customer/update:");
+    console.error(err);
+
     return res.status(500).json({
       error: "Failed to publish customers",
       details: err?.message,
@@ -1346,6 +1673,43 @@ app.post("/customers/serve/publish", async (req, res) => {
     return res.status(500).json({
       error: "Failed to publish customers",
       details: err?.message,
+    });
+  }
+});
+
+// --------------------------------------------------
+// TEST GOOGLE MAPS LINK RESOLVER
+// --------------------------------------------------
+
+app.get("/location/resolve", async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).json({
+        error: "Google Maps URL is required",
+      });
+    }
+
+    const location = await resolveGoogleMapsLink(url);
+
+    if (!location) {
+      return res.status(404).json({
+        error: "Could not extract coordinates",
+      });
+    }
+
+    return res.json({
+      success: true,
+      originalUrl: url,
+      ...location,
+    });
+  } catch (error) {
+    console.error("❌ Location resolver error:", error);
+
+    return res.status(500).json({
+      error: "Failed to resolve location",
+      details: error.message,
     });
   }
 });

@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import "./StoryBoard.css";
+import RouteMap from "../RouteMap";
 
-// const API_URL = "http://localhost:4000";
-const API_URL = "https://thedabbacentralapplication.onrender.com";
+const API_URL = "http://localhost:4000";
+// const API_URL = "https://thedabbacentralapplication.onrender.com";
 const colors = [
   { bg: "#E0F7FA", header: "#00ACC1" },
   { bg: "#FFF3E0", header: "#FB8C00" },
@@ -50,6 +51,7 @@ const buttonStyle = {
 };
 const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
   const [columns, setColumns] = useState({});
+  const [visibleRoutes, setVisibleRoutes] = useState({});
   const [selectedCard, setSelectedCard] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [mealType, setMealType] = useState("lunch");
@@ -64,6 +66,13 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
   const [selectedWhatsappRoute, setSelectedWhatsappRoute] = useState(null);
 
   const currentRoute = routes[currentRouteIndex];
+
+  const toggleRouteVisibility = (routeName) => {
+    setVisibleRoutes((prev) => ({
+      ...prev,
+      [routeName]: prev[routeName] === false,
+    }));
+  };
 
   const transformBackendData = (data) => {
     const sortedColumns = {};
@@ -85,11 +94,26 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
       });
 
       sortedColumns[columnId] = Object.entries(groupedByMap).map(
-        ([mapLinkOrId, group]) => ({
-          mapLink: group[0][`${mealType}MapLink`] || null,
-          customers: group,
-          id: group.map((g) => g.id).join("-"),
-        }),
+        ([mapLinkOrId, group]) => {
+          // Find the first customer that has coordinates
+          const firstWithCoords = group.find(
+            (customer) =>
+              typeof customer.lat === "number" &&
+              typeof customer.lng === "number",
+          );
+
+          return {
+            mapLink: group[0][`${mealType}MapLink`] || null,
+
+            customers: group,
+
+            id: group.map((g) => g.id).join("-"),
+
+            // Coordinates for RouteMap
+            lat: firstWithCoords?.lat ?? null,
+            lng: firstWithCoords?.lng ?? null,
+          };
+        },
       );
     });
 
@@ -1075,6 +1099,12 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
           </DragDropContext>
         </div>
       )}
+      <RouteMap
+        routes={columns}
+        visibleRoutes={visibleRoutes}
+        onToggleRoute={toggleRouteVisibility}
+      />
+
       {showMoveModal && movingCard && (
         <div
           style={modalBackdropStyle}
@@ -1223,6 +1253,37 @@ const StoryBoard = ({ isPublish, isFetchAllCustomers }) => {
                     Separate
                   </button>
                 )}
+                <div style={{ marginBottom: "12px" }}>
+                  <strong>Latitude:</strong>{" "}
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={c.lat ?? ""}
+                      onChange={(e) =>
+                        handleInputChange(idx, "lat", e.target.value)
+                      }
+                      className="border px-2 py-1 rounded w-full"
+                    />
+                  ) : (
+                    (c.lat ?? "No latitude")
+                  )}
+                </div>
+
+                <div style={{ marginBottom: "12px" }}>
+                  <strong>Longitude:</strong>{" "}
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={c.lng ?? ""}
+                      onChange={(e) =>
+                        handleInputChange(idx, "lng", e.target.value)
+                      }
+                      className="border px-2 py-1 rounded w-full"
+                    />
+                  ) : (
+                    (c.lng ?? "No longitude")
+                  )}
+                </div>
               </div>
             ))}
 
